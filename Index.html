@@ -4,175 +4,218 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Gaahlin Photography — Portrait photographer based in Stockholm">
 <title>Gaahlin Photography</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Cormorant+Garamond:wght@300;400&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth;background:#0a0a0a}
-body{background:#0a0a0a;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;letter-spacing:.12em;line-height:1.7;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth;background:#080808}
+body{background:#080808;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.5rem 2rem;padding-top:calc(1.5rem + env(safe-area-inset-top))}
-nav::before{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,10,.97) 0%,transparent 100%);pointer-events:none}
-.nav-logo{font-size:10px;letter-spacing:.3em;text-transform:uppercase;font-weight:400;color:#fff;text-decoration:none;position:relative}
-.hamburger{position:relative;display:flex;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;z-index:101}
-.hamburger span{display:block;width:22px;height:1px;background:#fff;transition:all .3s;transform-origin:center}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:2rem 3rem;transition:padding .4s,background .4s}
+nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur(10px)}
+.nav-logo{font-family:‘IM Fell English’,serif;font-size:13px;letter-spacing:.25em;text-transform:uppercase;color:#fff;text-decoration:none;opacity:.9}
+.nav-links{display:flex;gap:2.5rem;list-style:none}
+.nav-links a{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
+.nav-links a:hover{color:#fff}
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;z-index:101}
+.hamburger span{display:block;width:22px;height:1px;background:#fff;transition:all .3s}
 .hamburger.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
 .hamburger.open span:nth-child(2){opacity:0}
 .hamburger.open span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
-.mobile-menu{position:fixed;inset:0;background:rgba(10,10,10,.98);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3rem;opacity:0;pointer-events:none;transition:opacity .3s}
+.mobile-menu{position:fixed;inset:0;background:rgba(8,8,8,.98);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3rem;opacity:0;pointer-events:none;transition:opacity .3s}
 .mobile-menu.open{opacity:1;pointer-events:all}
-.mobile-menu a{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.45);text-decoration:none;transition:color .3s}
+.mobile-menu a{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
 .mobile-menu a:active{color:#fff}
-.nav-links{display:none}
-@media(min-width:768px){
-  .nav-links{display:flex;gap:3rem;list-style:none;position:relative}
-  .nav-links a{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.45);text-decoration:none;transition:color .3s}
-  .nav-links a:hover{color:#fff}
-  .hamburger{display:none}
-  .mobile-menu{display:none}
-  nav{padding:2rem 4rem}
-}
+
 /* HERO */
-#hero{min-height:100svh;display:flex;flex-direction:column;justify-content:flex-end;padding:0 2rem 4rem;padding-bottom:calc(4rem + env(safe-area-inset-bottom));position:relative;overflow:hidden;background:#111}
-@media(min-width:768px){#hero{padding:0 4rem 5rem}}
-.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,rgba(255,255,255,.03) 0%,transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(255,255,255,.02) 0%,transparent 50%)}
-.hero-content{position:relative}
-.hero-tag{font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:1.2rem}
-.hero-logo{font-family:'IM Fell English','Didot','Bodoni MT',Georgia,serif;font-size:clamp(1.8rem,7vw,5.5rem);font-weight:400;letter-spacing:.18em;text-transform:uppercase;line-height:1;color:#fff;margin-bottom:2rem;white-space:nowrap}
-@media(max-width:480px){.hero-logo{font-size:clamp(1.3rem,7.5vw,2.2rem);letter-spacing:.12em}}
-.hero-sub{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.45);max-width:320px;line-height:2.2}
-.scroll-hint{position:absolute;bottom:2.5rem;right:2rem;display:flex;align-items:center;gap:1rem;font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.45)}
-.scroll-line{width:30px;height:1px;background:rgba(255,255,255,.45);animation:scrollLine 2s ease-in-out infinite}
-@keyframes scrollLine{0%,100%{transform:scaleX(1);opacity:.4}50%{transform:scaleX(.5);opacity:1}}
-/* SECTIONS */
-section{padding:5rem 2rem}
-@media(min-width:768px){section{padding:8rem 4rem}}
-.section-label{font-size:9px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:3rem;display:flex;align-items:center;gap:1.5rem}
-.section-label::after{content:'';width:40px;height:1px;background:rgba(255,255,255,.1)}
+#hero{position:relative;height:100svh;overflow:hidden}
+.hero-img{width:100%;height:100%;object-fit:cover;object-position:center;filter:brightness(.75);transition:transform 8s ease,filter .6s}
+#hero:hover .hero-img{transform:scale(1.03);filter:brightness(.65)}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(8,8,8,.75) 100%)}
+.hero-bottom{position:absolute;bottom:0;left:0;right:0;padding:3rem;display:flex;justify-content:space-between;align-items:flex-end}
+.hero-title{font-family:‘IM Fell English’,serif;font-size:clamp(2.5rem,6vw,5rem);font-weight:400;letter-spacing:.15em;text-transform:uppercase;line-height:1;color:#fff}
+.hero-title em{font-style:italic;opacity:.65;font-size:75%;display:block;margin-top:.3rem}
+.hero-meta{text-align:right}
+.hero-meta p{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);line-height:2.2}
+.hero-scroll{position:absolute;bottom:3rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.8rem;opacity:.35}
+.hero-scroll span{font-size:8px;letter-spacing:.4em;text-transform:uppercase}
+.scroll-arrow{width:1px;height:40px;background:linear-gradient(to bottom,transparent,#fff);animation:arrowPulse 2s ease-in-out infinite}
+@keyframes arrowPulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+/* INTRO */
+#intro{padding:6rem 3rem;max-width:700px}
+.section-label{font-size:8px;letter-spacing:.5em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:2rem}
+.intro-text{font-family:‘Cormorant Garamond’,serif;font-size:clamp(1.5rem,2.8vw,2.3rem);font-weight:300;line-height:1.55;color:rgba(255,255,255,.82);letter-spacing:.02em}
+
 /* GALLERY */
-#gallery{background:#0a0a0a}
-.gallery-grid{columns:2;column-gap:3px}
-@media(min-width:768px){.gallery-grid{columns:3}}
-.gallery-item{break-inside:avoid;margin-bottom:3px;overflow:hidden;position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.gallery-item img{width:100%;display:block;transition:transform .6s cubic-bezier(.25,.46,.45,.94);filter:grayscale(15%)}
-.gallery-item:active img{transform:scale(1.03)}
-@media(hover:hover){.gallery-item:hover img{transform:scale(1.04);filter:grayscale(0%)}}
+#gallery{padding:0 3rem 6rem;border-top:1px solid rgba(255,255,255,.06)}
+#gallery .section-label{padding-top:4rem;margin-bottom:3rem}
+.gallery-grid{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:80px;gap:4px}
+.g1{grid-column:1/6;grid-row:1/6}
+.g2{grid-column:6/10;grid-row:1/4}
+.g3{grid-column:10/13;grid-row:1/5}
+.g4{grid-column:6/9;grid-row:4/7}
+.g5{grid-column:9/13;grid-row:5/8}
+.g6{grid-column:1/5;grid-row:6/9}
+.g7{grid-column:5/9;grid-row:7/10}
+.g8{grid-column:9/13;grid-row:8/11}
+.gallery-item{overflow:hidden;position:relative;cursor:pointer}
+.gallery-item img{width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .4s;filter:grayscale(20%) brightness(.9)}
+.gallery-item:hover img{transform:scale(1.06);filter:grayscale(0%) brightness(1)}
+
+/* STRIP */
+#featured{padding:4rem 0;border-top:1px solid rgba(255,255,255,.06)}
+#featured .section-label{padding-left:3rem;margin-bottom:2rem}
+.featured-strip{display:flex;gap:4px;overflow-x:auto;padding:0 3rem 1rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.featured-strip::-webkit-scrollbar{display:none}
+.strip-item{flex:0 0 260px;height:360px;overflow:hidden;cursor:pointer}
+.strip-item img{width:100%;height:100%;object-fit:cover;transition:transform .6s;filter:grayscale(10%)}
+.strip-item:hover img{transform:scale(1.05)}
+
 /* ABOUT */
-#about{background:#111;border-top:1px solid rgba(255,255,255,.1)}
-.about-layout{display:flex;flex-direction:column;gap:3rem}
-@media(min-width:768px){.about-layout{display:grid;grid-template-columns:1fr 1fr;gap:8rem;align-items:start;max-width:1000px}}
-.about-portrait{aspect-ratio:3/4;background:#1a1a1a;overflow:hidden;max-width:320px}
-@media(min-width:768px){.about-portrait{max-width:100%}}
-.about-portrait img{width:100%;height:100%;object-fit:cover;filter:grayscale(20%);opacity:.9}
-.about-portrait-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.45);font-size:9px;letter-spacing:.3em;text-transform:uppercase;background:#2a2a2a}
-.about-text h2{font-size:10px;font-weight:400;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:2rem}
-.about-text p{font-size:12px;letter-spacing:.08em;line-height:2.2;color:rgba(255,255,255,.7);margin-bottom:1.5rem;text-transform:uppercase;font-weight:300}
-.about-name{margin-top:2.5rem;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#fff;padding-top:2rem;border-top:1px solid rgba(255,255,255,.1)}
+#about{display:grid;grid-template-columns:1fr 1fr;min-height:80vh;border-top:1px solid rgba(255,255,255,.06)}
+.about-image{position:relative;overflow:hidden}
+.about-image img{width:100%;height:100%;object-fit:cover;filter:grayscale(15%) brightness(.85)}
+.about-content{padding:6rem 4rem;display:flex;flex-direction:column;justify-content:center;background:#0d0d0d}
+.about-content h2{font-family:‘IM Fell English’,serif;font-size:clamp(1.8rem,2.8vw,3rem);font-weight:400;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2.5rem;line-height:1.1;margin-top:1rem}
+.about-content p{font-size:12px;letter-spacing:.1em;line-height:2.2;color:rgba(255,255,255,.6);text-transform:uppercase;font-weight:300;margin-bottom:1.5rem;max-width:420px}
+.about-sig{margin-top:3rem;padding-top:2rem;border-top:1px solid rgba(255,255,255,.08);font-family:‘IM Fell English’,serif;font-style:italic;font-size:1.3rem;color:rgba(255,255,255,.45)}
+
 /* CONTACT */
-#contact{background:#0a0a0a;border-top:1px solid rgba(255,255,255,.1)}
-.contact-layout{display:flex;flex-direction:column;gap:4rem}
-@media(min-width:768px){.contact-layout{display:grid;grid-template-columns:1fr 1fr;gap:8rem;max-width:1000px}}
-.contact-intro h2{font-size:clamp(2rem,8vw,3.5rem);font-weight:300;letter-spacing:.15em;text-transform:uppercase;line-height:1.1;margin-bottom:1.5rem}
-.contact-intro p{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.45);line-height:2.4;margin-bottom:2.5rem}
-.social-link{display:inline-flex;align-items:center;gap:1rem;font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.45);text-decoration:none;transition:color .3s;padding-top:2rem;border-top:1px solid rgba(255,255,255,.1)}
-.social-link:hover{color:#fff}
-.contact-form{display:flex;flex-direction:column;gap:0}
-.form-group{position:relative;border-bottom:1px solid rgba(255,255,255,.1);transition:border-color .3s}
-.form-group:focus-within{border-color:rgba(255,255,255,.4)}
-.form-group label{display:block;font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:1.5rem 0 .5rem}
-.form-group input,.form-group textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:inherit;font-size:14px;letter-spacing:.08em;padding:0 0 1.5rem;resize:none;-webkit-appearance:none;border-radius:0}
+#contact{padding:8rem 3rem;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:8rem;max-width:1100px}
+.contact-intro h2{font-family:‘IM Fell English’,serif;font-size:clamp(2.5rem,4vw,4rem);font-weight:400;letter-spacing:.1em;text-transform:uppercase;line-height:1;margin:1rem 0 2rem}
+.contact-intro p{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.45);line-height:2.4;margin-bottom:3rem}
+.contact-links{display:flex;flex-direction:column;gap:1.5rem}
+.contact-link{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);text-decoration:none;transition:color .3s;display:flex;align-items:center;gap:1rem}
+.contact-link::before{content:’’;width:20px;height:1px;background:currentColor;transition:width .3s}
+.contact-link:hover{color:#fff}
+.contact-link:hover::before{width:40px}
+.form-group{border-bottom:1px solid rgba(255,255,255,.08);transition:border-color .3s}
+.form-group:focus-within{border-color:rgba(255,255,255,.35)}
+.form-group label{display:block;font-size:8px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:1.5rem 0 .5rem}
+.form-group input,.form-group textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:inherit;font-size:13px;letter-spacing:.08em;padding:0 0 1.5rem;resize:none;-webkit-appearance:none;border-radius:0}
 .form-group textarea{min-height:100px}
-.form-submit{margin-top:2.5rem;display:flex;flex-direction:column;gap:1rem}
-@media(min-width:480px){.form-submit{flex-direction:row;align-items:center}}
-.btn-submit{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;font-family:inherit;font-size:9px;letter-spacing:.35em;text-transform:uppercase;padding:1.2rem 2.5rem;cursor:pointer;transition:all .3s;-webkit-appearance:none;border-radius:0;touch-action:manipulation}
-.btn-submit:active{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.5)}
-.submit-note{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.btn-submit{margin-top:3rem;background:transparent;border:1px solid rgba(255,255,255,.2);color:#fff;font-family:inherit;font-size:9px;letter-spacing:.4em;text-transform:uppercase;padding:1.3rem 3rem;cursor:pointer;transition:all .4s;display:inline-flex;align-items:center;gap:1.5rem;-webkit-appearance:none;border-radius:0}
+.btn-submit::after{content:‘→’;transition:transform .3s}
+.btn-submit:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.4)}
+.btn-submit:hover::after{transform:translateX(6px)}
+.submit-note{display:block;margin-top:1rem;font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+
 /* FOOTER */
-footer{padding:2rem;padding-bottom:calc(2rem + env(safe-area-inset-bottom));border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:.5rem;background:#0a0a0a}
-@media(min-width:768px){footer{flex-direction:row;justify-content:space-between;align-items:center;padding:2rem 4rem}}
-footer p{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+footer{padding:2rem 3rem;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;background:#080808}
+footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.25)}
+
 /* LIGHTBOX */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:1000;align-items:center;justify-content:center;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:1000;align-items:center;justify-content:center}
 .lightbox.open{display:flex}
-.lightbox img{max-width:95vw;max-height:90svh;object-fit:contain}
-.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.45);cursor:pointer;background:none;border:none;padding:.5rem;-webkit-tap-highlight-color:transparent}
+.lightbox img{max-width:92vw;max-height:92svh;object-fit:contain}
+.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.4);cursor:pointer;background:none;border:none;padding:.5rem;transition:color .3s}
+.lightbox-close:hover{color:#fff}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+.nav-links{display:none}
+.hamburger{display:flex}
+.gallery-grid{grid-template-columns:1fr 1fr;grid-auto-rows:200px}
+.g1,.g2,.g3,.g4,.g5,.g6,.g7,.g8{grid-column:auto;grid-row:auto}
+#about{grid-template-columns:1fr}
+.about-image{height:60vw}
+#contact{grid-template-columns:1fr;gap:4rem;padding:5rem 3rem}
+.hero-bottom{flex-direction:column;align-items:flex-start;gap:1rem}
+.hero-meta{text-align:left}
+}
+@media(max-width:600px){
+nav{padding:1.5rem;padding-top:calc(1.5rem + env(safe-area-inset-top))}
+nav.scrolled{padding:1rem 1.5rem}
+#gallery,#contact,#intro,#featured .section-label,#featured .featured-strip{padding-left:1.5rem;padding-right:1.5rem}
+.hero-bottom{padding:1.5rem}
+.about-content{padding:3rem 1.5rem}
+.gallery-grid{grid-template-columns:1fr 1fr;grid-auto-rows:160px}
+footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
+}
 </style>
+
 </head>
 <body>
-<nav>
-  <a href="#hero" class="nav-logo">Gaahlin Photography</a>
+
+<nav id="mainNav">
+  <a href="#hero" class="nav-logo">Gaahlin</a>
   <ul class="nav-links">
-    <li><a href="#gallery">Gallery</a></li>
+    <li><a href="#gallery">Work</a></li>
     <li><a href="#about">About</a></li>
     <li><a href="#contact">Contact</a></li>
   </ul>
-  <button class="hamburger" id="hamburger" aria-label="Meny">
-    <span></span><span></span><span></span>
-  </button>
+  <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
 </nav>
+
 <div class="mobile-menu" id="mobileMenu">
-  <a href="#gallery" class="menu-link">Gallery</a>
+  <a href="#gallery" class="menu-link">Work</a>
   <a href="#about" class="menu-link">About</a>
   <a href="#contact" class="menu-link">Contact</a>
 </div>
 
 <section id="hero">
-  <div class="hero-bg"></div>
-  <div class="hero-content">
-    <p class="hero-tag">Portrait Photography — Stockholm</p>
-    <p class="hero-sub">Photography, for me, is where creativity, instinct, and precision meet.</p>
+  <img class="hero-img" src="https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1" alt="Gaahlin Photography">
+  <div class="hero-overlay"></div>
+  <div class="hero-bottom">
+    <div class="hero-title">Gaahlin<em>Photography</em></div>
+    <div class="hero-meta">
+      <p>Portrait</p>
+      <p>Stockholm</p>
+      <p>2026</p>
+    </div>
   </div>
-  <div class="scroll-hint"><div class="scroll-line"></div><span>Scroll</span></div>
+  <div class="hero-scroll"><span>Scroll</span><div class="scroll-arrow"></div></div>
+</section>
+
+<section id="intro">
+  <p class="section-label">Statement</p>
+  <p class="intro-text">Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.</p>
 </section>
 
 <section id="gallery">
-  <p class="section-label">Gallery</p>
+  <p class="section-label">Selected Work</p>
   <div class="gallery-grid" id="galleryGrid"></div>
 </section>
 
+<section id="featured">
+  <p class="section-label">Series</p>
+  <div class="featured-strip" id="featuredStrip"></div>
+</section>
+
 <section id="about">
-  <p class="section-label">About</p>
-  <div class="about-layout">
-    <div class="about-portrait">
-      <img src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Anders Gåhlin Dufberg">
-    </div>
-    <div class="about-text">
-      <h2>Anders Gåhlin Dufberg</h2>
-      <p>Photography, for me, is where creativity, instinct, and precision meet.</p>
-      <p>Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.</p>
-      <p>Clients choose me for photographs that feel personal, distinctive, and lasting — with a strong sense of light, composition, and human connection, I create work that leaves an impression.</p>
-      <div class="about-name">Anders Gåhlin Dufberg</div>
-    </div>
+  <div class="about-image">
+    <img src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Anders Gåhlin Dufberg">
+  </div>
+  <div class="about-content">
+    <p class="section-label">About</p>
+    <h2>Anders Gåhlin<br>Dufberg</h2>
+    <p>Photography, for me, is where creativity, instinct, and precision meet.</p>
+    <p>Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.</p>
+    <p>Clients choose me for photographs that feel personal, distinctive, and lasting.</p>
+    <div class="about-sig">Anders</div>
   </div>
 </section>
 
 <section id="contact">
-  <p class="section-label">Contact</p>
-  <div class="contact-layout">
-    <div class="contact-intro">
-      <h2>Work<br>with me</h2>
-      <p>Open for portrait commissions,<br>editorial, and personal projects.</p>
-      <a href="https://www.instagram.com/gaahlinphotography/" class="social-link" target="_blank">Instagram — @gaahlinphotography</a>
+  <div class="contact-intro">
+    <p class="section-label">Contact</p>
+    <h2>Work<br>with me</h2>
+    <p>Open for portrait commissions,<br>editorial, and personal projects.</p>
+    <div class="contact-links">
+      <a href="https://www.instagram.com/gaahlinphotography/" class="contact-link" target="_blank">Instagram</a>
+      <a href="mailto:anders@gaahlin.com" class="contact-link">anders@gaahlin.com</a>
     </div>
-    <form class="contact-form" id="contactForm" action="https://formspree.io/f/mbdwayzy" method="POST">
-      <div class="form-group">
-        <label>Name</label>
-        <input type="text" name="name" placeholder="Your name" autocomplete="name" required>
-      </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="email" placeholder="your@email.com" autocomplete="email" inputmode="email" required>
-      </div>
-      <div class="form-group">
-        <label>Message</label>
-        <textarea name="message" placeholder="Tell me about your project..." required></textarea>
-      </div>
-      <div class="form-submit">
-        <button type="submit" class="btn-submit">Send message</button>
-        <span class="submit-note" id="submitNote"></span>
-      </div>
-    </form>
   </div>
+  <form id="contactForm" action="https://formspree.io/f/mbdwayzy" method="POST">
+    <div class="form-group"><label>Name</label><input type="text" name="name" required autocomplete="name"></div>
+    <div class="form-group"><label>Email</label><input type="email" name="email" required inputmode="email" autocomplete="email"></div>
+    <div class="form-group"><label>Message</label><textarea name="message" required></textarea></div>
+    <button type="submit" class="btn-submit">Send message</button>
+    <span class="submit-note" id="submitNote"></span>
+  </form>
 </section>
 
 <footer>
@@ -190,15 +233,30 @@ const photos = [
   'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
   'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
   'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
+  'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
+  'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
+  'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
+  'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
+  'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
 ];
 
+const classes = ['g1','g2','g3','g4','g5','g6','g7','g8'];
 const grid = document.getElementById('galleryGrid');
-photos.forEach((src, i) => {
-  const item = document.createElement('div');
-  item.className = 'gallery-item';
-  item.innerHTML = `<img src="${src}" alt="Portrait ${i+1}" loading="lazy">`;
-  item.addEventListener('click', () => openLightbox(src));
-  grid.appendChild(item);
+photos.forEach((src,i) => {
+  const el = document.createElement('div');
+  el.className = `gallery-item ${classes[i]||''}`;
+  el.innerHTML = `<img src="${src}" alt="Portrait ${i+1}" loading="${i<3?'eager':'lazy'}">`;
+  el.addEventListener('click', () => openLightbox(src));
+  grid.appendChild(el);
+});
+
+const strip = document.getElementById('featuredStrip');
+photos.slice(0,5).forEach((src,i) => {
+  const el = document.createElement('div');
+  el.className = 'strip-item';
+  el.innerHTML = `<img src="${src}" alt="Series ${i+1}" loading="lazy">`;
+  el.addEventListener('click', () => openLightbox(src));
+  strip.appendChild(el);
 });
 
 function openLightbox(src) {
@@ -211,32 +269,26 @@ function closeLightbox() {
   document.body.style.overflow = '';
 }
 document.getElementById('lightbox').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeLightbox();
+  if(e.target===e.currentTarget) closeLightbox();
 });
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeLightbox(); });
+
 document.getElementById('contactForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const note = document.getElementById('submitNote');
   const btn = document.querySelector('.btn-submit');
   btn.textContent = 'Sending...';
   try {
-    const res = await fetch(this.action, {
-      method: 'POST',
-      body: new FormData(this),
-      headers: { 'Accept': 'application/json' }
-    });
-    if (res.ok) {
-      note.textContent = 'Message sent — thank you.';
-      this.reset();
-    } else {
-      note.textContent = 'Something went wrong, please try again.';
-    }
-  } catch {
-    note.textContent = 'Something went wrong, please try again.';
-  }
+    const res = await fetch(this.action, {method:'POST',body:new FormData(this),headers:{'Accept':'application/json'}});
+    note.textContent = res.ok ? 'Message sent — thank you.' : 'Something went wrong.';
+    if(res.ok) this.reset();
+  } catch { note.textContent = 'Something went wrong.'; }
   btn.textContent = 'Send message';
   setTimeout(() => note.textContent = '', 5000);
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+const nav = document.getElementById('mainNav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 50), {passive:true});
 
 const hamburger = document.getElementById('hamburger');
 const mobileMenu = document.getElementById('mobileMenu');
@@ -245,13 +297,11 @@ hamburger.addEventListener('click', () => {
   mobileMenu.classList.toggle('open');
   document.body.style.overflow = mobileMenu.classList.contains('open') ? 'hidden' : '';
 });
-document.querySelectorAll('.menu-link').forEach(link => {
-  link.addEventListener('click', () => {
-    hamburger.classList.remove('open');
-    mobileMenu.classList.remove('open');
-    document.body.style.overflow = '';
-  });
-});
+document.querySelectorAll('.menu-link').forEach(l => l.addEventListener('click', () => {
+  hamburger.classList.remove('open');
+  mobileMenu.classList.remove('open');
+  document.body.style.overflow = '';
+}));
 </script>
 
 </body>

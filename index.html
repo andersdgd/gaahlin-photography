@@ -29,17 +29,23 @@ html{scroll-behavior:smooth;background:#080808}
 body{background:#080808;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
 /* LANGUAGE SWITCHER */
-.lang-switcher{display:flex;align-items:center;gap:.4rem;position:relative}
-.lang-btn{background:none;border:none;cursor:pointer;padding:.3rem .4rem;border-radius:3px;opacity:.35;transition:opacity .3s,transform .2s;display:flex;flex-direction:column;align-items:center;gap:.25rem;-webkit-tap-highlight-color:transparent}
-.lang-btn:hover,.lang-btn.active{opacity:1}
-.lang-btn.active{opacity:1}
-.lang-btn:hover{transform:translateY(-1px)}
-.lang-flag{width:22px;height:15px;border-radius:2px;overflow:hidden;display:block;position:relative}
-.lang-code{font-size:7px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.6);font-family:‘Helvetica Neue’,sans-serif}
-.lang-btn.active .lang-code{color:#fff}
-
-/* FLAG SVGs inline */
-.flag-se,.flag-no,.flag-dk,.flag-fi,.flag-en{width:100%;height:100%}
+.lang-switcher{position:relative}
+.lang-current{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;color:rgba(255,255,255,.5);transition:color .3s;-webkit-tap-highlight-color:transparent}
+.lang-current:hover{color:#fff}
+.lang-current-flag{width:18px;height:12px;border-radius:1px;overflow:hidden;display:block}
+.lang-current-code{font-size:8px;letter-spacing:.3em;text-transform:uppercase}
+.lang-current-arrow{font-size:8px;opacity:.4;transition:transform .3s}
+.lang-switcher.open .lang-current-arrow{transform:rotate(180deg)}
+.lang-dropdown{position:absolute;top:calc(100% + .8rem);right:0;background:rgba(12,12,12,.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.06);min-width:140px;opacity:0;pointer-events:none;transform:translateY(-8px);transition:opacity .3s,transform .3s;z-index:200}
+.lang-switcher.open .lang-dropdown{opacity:1;pointer-events:all;transform:translateY(0)}
+.lang-option{display:flex;align-items:center;gap:.8rem;padding:.9rem 1.2rem;cursor:pointer;transition:background .2s;border-bottom:1px solid rgba(255,255,255,.04)}
+.lang-option:last-child{border-bottom:none}
+.lang-option:hover{background:rgba(255,255,255,.05)}
+.lang-option.active{background:rgba(255,255,255,.04)}
+.lang-flag{width:20px;height:13px;border-radius:1px;overflow:hidden;display:block;flex-shrink:0}
+.lang-name{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.lang-option.active .lang-name{color:#fff}
+.lang-option:hover .lang-name{color:#fff}
 
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.8rem 3rem;transition:padding .4s,background .4s}
@@ -197,7 +203,14 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
     <li><a href="#contact" data-i18n="nav_contact">Contact</a></li>
   </ul>
   <div class="nav-right">
-    <div class="lang-switcher" id="langSwitcher"></div>
+    <div class="lang-switcher" id="langSwitcher">
+      <button class="lang-current" id="langCurrent">
+        <span class="lang-current-flag" id="langCurrentFlag"></span>
+        <span class="lang-current-code" id="langCurrentCode">SV</span>
+        <span class="lang-current-arrow">▾</span>
+      </button>
+      <div class="lang-dropdown" id="langDropdown"></div>
+    </div>
     <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
   </div>
 </nav>
@@ -213,7 +226,6 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
   <img class="hero-img" id="heroImg" src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Gaahlin Photography">
   <div class="hero-overlay"></div>
   <div class="hero-bottom">
-    <div class="hero-title">Gaahlin<em>Photography</em></div>
     <div class="hero-meta">
       <p data-i18n="hero_genre">Portrait</p>
       <p>Stockholm</p>
@@ -382,15 +394,25 @@ function buildLangButtons(containerId) {
   if(!c) return;
   c.innerHTML = '';
   Object.keys(langs).forEach(key => {
-    const btn = document.createElement('button');
-    btn.className = 'lang-btn' + (key === currentLang ? ' active' : '');
-    btn.setAttribute('data-lang', key);
-    btn.setAttribute('aria-label', key.toUpperCase());
-    btn.innerHTML = `<span class="lang-flag">${flags[key]}</span><span class="lang-code">${langs[key].label}</span>`;
-    btn.addEventListener('click', () => setLang(key));
-    c.appendChild(btn);
+    const opt = document.createElement('div');
+    opt.className = 'lang-option' + (key === currentLang ? ' active' : '');
+    opt.setAttribute('data-lang', key);
+    opt.innerHTML = `<span class="lang-flag">${flags[key]}</span><span class="lang-name">${langs[key].fullname||langs[key].label}</span>`;
+    opt.addEventListener('click', () => { setLang(key); closeLangDropdown(); });
+    c.appendChild(opt);
   });
 }
+
+function closeLangDropdown() {
+  document.getElementById('langSwitcher').classList.remove('open');
+}
+
+document.getElementById('langCurrent').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('langSwitcher').classList.toggle('open');
+});
+
+document.addEventListener('click', closeLangDropdown);
 
 function setLang(code) {
   currentLang = code;
@@ -400,9 +422,13 @@ function setLang(code) {
     const key = el.getAttribute('data-i18n');
     if(t[key] !== undefined) el.innerHTML = t[key];
   });
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-lang') === code);
+  // Update dropdown active states
+  document.querySelectorAll('.lang-option').forEach(opt => {
+    opt.classList.toggle('active', opt.getAttribute('data-lang') === code);
   });
+  // Update current button
+  document.getElementById('langCurrentFlag').innerHTML = flags[code];
+  document.getElementById('langCurrentCode').textContent = t.label;
 }
 
 buildLangButtons('langSwitcher');

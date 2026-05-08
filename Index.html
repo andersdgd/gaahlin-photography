@@ -316,35 +316,54 @@ document.querySelectorAll('.gallery-item,.strip-item').forEach(el => {
 });
 
 // ── INTRO ANIMATION ─────────────────────────────────
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    document.getElementById('intro-screen').classList.add('open');
-    setTimeout(() => {
-      document.getElementById('introTextWrap').style.opacity = '0';
-      document.getElementById('introTextWrap').style.transition = 'opacity .4s';
-    }, 600);
-    setTimeout(() => {
-      document.getElementById('intro-screen').style.display = 'none';
-      document.getElementById('introTextWrap').style.display = 'none';
-      document.getElementById('mainNav').classList.add('visible');
-      document.getElementById('heroBottom').classList.add('visible');
-    }, 1400);
-  }, 900);
-});
+// ── INTRO ANIMATION ─────────────────────────────────
+const introScreen = document.getElementById('intro-screen');
+const introText = document.getElementById('introTextWrap');
+const mainNav = document.getElementById('mainNav');
+const heroBottom = document.getElementById('heroBottom');
+
+// Start immediately, no waiting for load
+setTimeout(() => {
+  introScreen.classList.add('open');
+}, 800);
+
+setTimeout(() => {
+  introText.style.opacity = '0';
+  introText.style.transition = 'opacity .5s';
+}, 1200);
+
+setTimeout(() => {
+  introScreen.style.pointerEvents = 'none';
+  introScreen.style.display = 'none';
+  introText.style.display = 'none';
+  mainNav.classList.add('visible');
+  heroBottom.classList.add('visible');
+}, 2200);
 
 // ── PARALLAX HERO ────────────────────────────────────
 const heroImg = document.getElementById('heroImg');
 window.addEventListener('scroll', () => {
   const y = window.scrollY;
-  heroImg.style.transform = `translateY(${y * 0.35}px)`;
+  if(window.innerWidth > 768) {
+    heroImg.style.transform = `translateY(${y * 0.35}px)`;
+  }
   document.getElementById('mainNav').classList.toggle('scrolled', y > 50);
 }, {passive:true});
 
 // ── SCROLL REVEAL ────────────────────────────────────
 const revealObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); }});
-}, {threshold:.12});
-document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+  entries.forEach(e => {
+    if(e.isIntersecting) {
+      e.target.classList.add('visible');
+      revealObserver.unobserve(e.target);
+    }
+  });
+}, {threshold: 0.08, rootMargin: '0px 0px -50px 0px'});
+
+// Observe after intro is done
+setTimeout(() => {
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+}, 2300);
 
 // ── PHOTOS ───────────────────────────────────────────
 const rawPhotos = [

@@ -52,18 +52,12 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 /* GALLERY */
 #gallery{padding:0 3rem 6rem;border-top:1px solid rgba(255,255,255,.06)}
 #gallery .section-label{padding-top:4rem;margin-bottom:3rem}
-.gallery-grid{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:80px;gap:4px}
-.g1{grid-column:1/6;grid-row:1/6}
-.g2{grid-column:6/10;grid-row:1/4}
-.g3{grid-column:10/13;grid-row:1/5}
-.g4{grid-column:6/9;grid-row:4/7}
-.g5{grid-column:9/13;grid-row:5/8}
-.g6{grid-column:1/5;grid-row:6/9}
-.g7{grid-column:5/9;grid-row:7/10}
-.g8{grid-column:9/13;grid-row:8/11}
-.gallery-item{overflow:hidden;position:relative;cursor:pointer}
-.gallery-item img{width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .4s;filter:grayscale(20%) brightness(.9)}
-.gallery-item:hover img{transform:scale(1.06);filter:grayscale(0%) brightness(1)}
+.gallery-grid{columns:3;column-gap:4px}
+.gallery-item{break-inside:avoid;margin-bottom:4px;overflow:hidden;position:relative;cursor:pointer}
+.gallery-item img{width:100%;height:auto;display:block;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .4s;filter:grayscale(20%) brightness(.9)}
+.gallery-item:hover img{transform:scale(1.04);filter:grayscale(0%) brightness(1)}
+@media(max-width:900px){.gallery-grid{columns:2}}
+@media(max-width:500px){.gallery-grid{columns:1}}
 
 /* STRIP */
 #featured{padding:4rem 0;border-top:1px solid rgba(255,255,255,.06)}
@@ -118,8 +112,6 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 @media(max-width:900px){
 .nav-links{display:none}
 .hamburger{display:flex}
-.gallery-grid{grid-template-columns:1fr 1fr;grid-auto-rows:200px}
-.g1,.g2,.g3,.g4,.g5,.g6,.g7,.g8{grid-column:auto;grid-row:auto}
 #about{grid-template-columns:1fr}
 .about-image{height:60vw}
 #contact{grid-template-columns:1fr;gap:4rem;padding:5rem 3rem}
@@ -129,10 +121,10 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 @media(max-width:600px){
 nav{padding:1.5rem;padding-top:calc(1.5rem + env(safe-area-inset-top))}
 nav.scrolled{padding:1rem 1.5rem}
-#gallery,#contact,#intro,#featured .section-label,#featured .featured-strip{padding-left:1.5rem;padding-right:1.5rem}
+#gallery,#contact,#intro,#featured .section-label{padding-left:1.5rem;padding-right:1.5rem}
+.featured-strip{padding-left:1.5rem;padding-right:1.5rem}
 .hero-bottom{padding:1.5rem}
 .about-content{padding:3rem 1.5rem}
-.gallery-grid{grid-template-columns:1fr 1fr;grid-auto-rows:160px}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }
 </style>
@@ -240,11 +232,10 @@ const photos = [
   'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
 ];
 
-const classes = ['g1','g2','g3','g4','g5','g6','g7','g8'];
 const grid = document.getElementById('galleryGrid');
 photos.forEach((src,i) => {
   const el = document.createElement('div');
-  el.className = `gallery-item ${classes[i]||''}`;
+  el.className = 'gallery-item';
   el.innerHTML = `<img src="${src}" alt="Portrait ${i+1}" loading="${i<3?'eager':'lazy'}">`;
   el.addEventListener('click', () => openLightbox(src));
   grid.appendChild(el);

@@ -10,16 +10,37 @@
 @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Cormorant+Garamond:wght@300;400&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;background:#080808}
-body{background:#080808;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{background:#080808;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased;cursor:none}
+
+/* CUSTOM CURSOR */
+.cursor{position:fixed;pointer-events:none;z-index:9999;mix-blend-mode:difference}
+.cursor-dot{width:6px;height:6px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);transition:transform .15s,width .3s,height .3s,background .3s}
+.cursor-ring{width:36px;height:36px;border:1px solid rgba(255,255,255,.5);border-radius:50%;transform:translate(-50%,-50%);transition:width .4s cubic-bezier(.25,.46,.45,.94),height .4s cubic-bezier(.25,.46,.45,.94),opacity .3s;position:fixed;pointer-events:none;z-index:9998}
+.cursor-label{position:fixed;pointer-events:none;z-index:9999;font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:#fff;opacity:0;transition:opacity .3s;white-space:nowrap;transform:translate(16px,-50%)}
+body.hovering-img .cursor-dot{width:48px;height:48px;background:rgba(255,255,255,.08)}
+body.hovering-img .cursor-ring{width:60px;height:60px;opacity:0}
+body.hovering-img .cursor-label{opacity:1}
+
+/* INTRO */
+#intro-screen{position:fixed;inset:0;z-index:500;display:flex;pointer-events:none}
+.intro-panel{width:50%;height:100%;background:#080808;transition:transform 1.2s cubic-bezier(.77,0,.175,1)}
+.intro-panel.left{transform-origin:left}
+.intro-panel.right{transform-origin:right}
+.intro-text-wrap{position:fixed;inset:0;z-index:501;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.intro-name{font-family:‘IM Fell English’,serif;font-size:clamp(2rem,6vw,5rem);letter-spacing:.25em;text-transform:uppercase;color:#fff;opacity:1;transition:opacity .4s}
+.intro-name em{font-style:italic;opacity:.6;font-size:70%}
+#intro-screen.open .intro-panel.left{transform:translateX(-100%)}
+#intro-screen.open .intro-panel.right{transform:translateX(100%)}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:2rem 3rem;transition:padding .4s,background .4s}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:2rem 3rem;transition:padding .4s,background .4s;opacity:0;transform:translateY(-10px);transition:opacity .6s,transform .6s,padding .4s,background .4s}
+nav.visible{opacity:1;transform:translateY(0)}
 nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur(10px)}
-.nav-logo{font-family:‘IM Fell English’,serif;font-size:13px;letter-spacing:.25em;text-transform:uppercase;color:#fff;text-decoration:none;opacity:.9}
+.nav-logo{font-family:‘IM Fell English’,serif;font-size:13px;letter-spacing:.25em;text-transform:uppercase;color:#fff;text-decoration:none}
 .nav-links{display:flex;gap:2.5rem;list-style:none}
 .nav-links a{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
 .nav-links a:hover{color:#fff}
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;z-index:101}
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:none;background:none;border:none;padding:4px;z-index:101}
 .hamburger span{display:block;width:22px;height:1px;background:#fff;transition:all .3s}
 .hamburger.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
 .hamburger.open span:nth-child(2){opacity:0}
@@ -31,10 +52,10 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 
 /* HERO */
 #hero{position:relative;height:100svh;overflow:hidden}
-.hero-img{width:100%;height:100%;object-fit:cover;object-position:center;filter:brightness(.75);transition:transform 8s ease,filter .6s}
-#hero:hover .hero-img{transform:scale(1.03);filter:brightness(.65)}
-.hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(8,8,8,.75) 100%)}
-.hero-bottom{position:absolute;bottom:0;left:0;right:0;padding:3rem;display:flex;justify-content:space-between;align-items:flex-end}
+.hero-img{width:100%;height:120%;object-fit:cover;object-position:center top;filter:brightness(.72);will-change:transform}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(8,8,8,.8) 100%)}
+.hero-bottom{position:absolute;bottom:0;left:0;right:0;padding:3rem;display:flex;justify-content:space-between;align-items:flex-end;opacity:0;transform:translateY(20px);transition:opacity .8s,transform .8s}
+.hero-bottom.visible{opacity:1;transform:translateY(0)}
 .hero-title{font-family:‘IM Fell English’,serif;font-size:clamp(2.5rem,6vw,5rem);font-weight:400;letter-spacing:.15em;text-transform:uppercase;line-height:1;color:#fff}
 .hero-title em{font-style:italic;opacity:.65;font-size:75%;display:block;margin-top:.3rem}
 .hero-meta{text-align:right}
@@ -44,8 +65,15 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 .scroll-arrow{width:1px;height:40px;background:linear-gradient(to bottom,transparent,#fff);animation:arrowPulse 2s ease-in-out infinite}
 @keyframes arrowPulse{0%,100%{opacity:.4}50%{opacity:1}}
 
-/* INTRO */
-#intro{padding:6rem 3rem;max-width:700px}
+/* REVEAL */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .9s cubic-bezier(.25,.46,.45,.94),transform .9s cubic-bezier(.25,.46,.45,.94)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.15s}
+.reveal-delay-2{transition-delay:.3s}
+.reveal-delay-3{transition-delay:.45s}
+
+/* INTRO TEXT */
+#statement{padding:6rem 3rem;max-width:700px}
 .section-label{font-size:8px;letter-spacing:.5em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:2rem}
 .intro-text{font-family:‘Cormorant Garamond’,serif;font-size:clamp(1.5rem,2.8vw,2.3rem);font-weight:300;line-height:1.55;color:rgba(255,255,255,.82);letter-spacing:.02em}
 
@@ -53,9 +81,9 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 #gallery{padding:0 3rem 6rem;border-top:1px solid rgba(255,255,255,.06)}
 #gallery .section-label{padding-top:4rem;margin-bottom:3rem}
 .gallery-grid{columns:3;column-gap:4px}
-.gallery-item{break-inside:avoid;margin-bottom:4px;overflow:hidden;position:relative;cursor:pointer}
-.gallery-item img{width:100%;height:auto;display:block;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .4s;filter:grayscale(20%) brightness(.9)}
-.gallery-item:hover img{transform:scale(1.04);filter:grayscale(0%) brightness(1)}
+.gallery-item{break-inside:avoid;margin-bottom:4px;overflow:hidden;position:relative;cursor:none}
+.gallery-item img{width:100%;height:auto;display:block;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .5s;filter:grayscale(20%) brightness(.9)}
+.gallery-item:hover img{transform:scale(1.04);filter:grayscale(0%) brightness(1.02)}
 @media(max-width:900px){.gallery-grid{columns:2}}
 @media(max-width:500px){.gallery-grid{columns:1}}
 
@@ -64,7 +92,7 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 #featured .section-label{padding-left:3rem;margin-bottom:2rem}
 .featured-strip{display:flex;gap:4px;overflow-x:auto;padding:0 3rem 1rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .featured-strip::-webkit-scrollbar{display:none}
-.strip-item{flex:0 0 260px;height:360px;overflow:hidden;cursor:pointer}
+.strip-item{flex:0 0 260px;height:360px;overflow:hidden;cursor:none}
 .strip-item img{width:100%;height:100%;object-fit:cover;transition:transform .6s;filter:grayscale(10%)}
 .strip-item:hover img{transform:scale(1.05)}
 
@@ -89,9 +117,9 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 .form-group{border-bottom:1px solid rgba(255,255,255,.08);transition:border-color .3s}
 .form-group:focus-within{border-color:rgba(255,255,255,.35)}
 .form-group label{display:block;font-size:8px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:1.5rem 0 .5rem}
-.form-group input,.form-group textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:inherit;font-size:13px;letter-spacing:.08em;padding:0 0 1.5rem;resize:none;-webkit-appearance:none;border-radius:0}
+.form-group input,.form-group textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:inherit;font-size:13px;letter-spacing:.08em;padding:0 0 1.5rem;resize:none;-webkit-appearance:none;border-radius:0;cursor:none}
 .form-group textarea{min-height:100px}
-.btn-submit{margin-top:3rem;background:transparent;border:1px solid rgba(255,255,255,.2);color:#fff;font-family:inherit;font-size:9px;letter-spacing:.4em;text-transform:uppercase;padding:1.3rem 3rem;cursor:pointer;transition:all .4s;display:inline-flex;align-items:center;gap:1.5rem;-webkit-appearance:none;border-radius:0}
+.btn-submit{margin-top:3rem;background:transparent;border:1px solid rgba(255,255,255,.2);color:#fff;font-family:inherit;font-size:9px;letter-spacing:.4em;text-transform:uppercase;padding:1.3rem 3rem;cursor:none;transition:all .4s;display:inline-flex;align-items:center;gap:1.5rem;-webkit-appearance:none;border-radius:0}
 .btn-submit::after{content:‘→’;transition:transform .3s}
 .btn-submit:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.4)}
 .btn-submit:hover::after{transform:translateX(6px)}
@@ -105,21 +133,21 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0);z-index:1000;align-items:center;justify-content:center;transition:background .4s}
 .lightbox.open{display:flex;background:rgba(0,0,0,.97)}
 .lightbox-img-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
-.lightbox img{max-width:82vw;max-height:88svh;object-fit:contain;transition:opacity .3s,transform .3s;opacity:0;transform:scale(.97)}
-.lightbox img.visible{opacity:1;transform:scale(1)}
-.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;padding:.5rem;transition:color .3s;z-index:10}
+#lightboxImg{max-width:82vw;max-height:88svh;object-fit:contain;transition:opacity .3s,transform .3s;opacity:0;transform:scale(.97)}
+#lightboxImg.visible{opacity:1;transform:scale(1)}
+.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);cursor:none;background:none;border:none;padding:.5rem;transition:color .3s;z-index:10}
 .lightbox-close:hover{color:#fff}
-.lb-arrow{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:1.5rem;z-index:10;display:flex;flex-direction:column;align-items:center;gap:.6rem;opacity:.35;transition:opacity .3s}
+.lb-arrow{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;cursor:none;padding:1.5rem;z-index:10;display:flex;flex-direction:column;align-items:center;gap:.6rem;opacity:.3;transition:opacity .3s}
 .lb-arrow:hover{opacity:1}
-.lb-arrow-left{left:1.5rem}
-.lb-arrow-right{right:1.5rem}
+.lb-arrow-left{left:1rem}
+.lb-arrow-right{right:1rem}
 .lb-arrow svg{width:36px;height:36px;stroke:#fff;stroke-width:1;fill:none;transition:transform .3s}
 .lb-arrow-left:hover svg{transform:translateX(-4px)}
 .lb-arrow-right:hover svg{transform:translateX(4px)}
 .lb-arrow span{font-size:7px;letter-spacing:.4em;text-transform:uppercase;color:#fff}
-.lb-counter{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem}
-.lb-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.25);transition:all .3s;cursor:pointer}
-.lb-dot.active{background:#fff;transform:scale(1.4)}
+.lb-counter{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.6rem}
+.lb-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);transition:all .3s;cursor:none}
+.lb-dot.active{background:#fff;transform:scale(1.5)}
 .lb-info{position:absolute;bottom:3.5rem;right:2rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.3)}
 
 /* RESPONSIVE */
@@ -133,10 +161,11 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 .hero-meta{text-align:left}
 }
 @media(max-width:600px){
+body{cursor:auto}
+.cursor,.cursor-ring,.cursor-label{display:none}
 nav{padding:1.5rem;padding-top:calc(1.5rem + env(safe-area-inset-top))}
 nav.scrolled{padding:1rem 1.5rem}
-#gallery,#contact,#intro,#featured .section-label{padding-left:1.5rem;padding-right:1.5rem}
-.featured-strip{padding-left:1.5rem;padding-right:1.5rem}
+#gallery,#contact,#statement{padding-left:1.5rem;padding-right:1.5rem}
 .hero-bottom{padding:1.5rem}
 .about-content{padding:3rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
@@ -145,6 +174,24 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 
 </head>
 <body>
+
+<!-- CURSOR -->
+
+<div class="cursor" id="cursorDot" style="position:fixed;top:0;left:0;pointer-events:none;z-index:9999">
+  <div class="cursor-dot"></div>
+</div>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="cursor-label" id="cursorLabel">View</div>
+
+<!-- INTRO -->
+
+<div id="intro-screen">
+  <div class="intro-panel left"></div>
+  <div class="intro-panel right"></div>
+</div>
+<div class="intro-text-wrap" id="introTextWrap">
+  <div class="intro-name">Gaahlin <em>Photography</em></div>
+</div>
 
 <nav id="mainNav">
   <a href="#hero" class="nav-logo">Gaahlin</a>
@@ -163,9 +210,9 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 </div>
 
 <section id="hero">
-  <img class="hero-img" src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Gaahlin Photography">
+  <img class="hero-img" id="heroImg" src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Gaahlin Photography">
   <div class="hero-overlay"></div>
-  <div class="hero-bottom">
+  <div class="hero-bottom" id="heroBottom">
     <div class="hero-title">Gaahlin<em>Photography</em></div>
     <div class="hero-meta">
       <p>Portrait</p>
@@ -176,50 +223,50 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
   <div class="hero-scroll"><span>Scroll</span><div class="scroll-arrow"></div></div>
 </section>
 
-<section id="intro">
-  <p class="section-label">Statement</p>
-  <p class="intro-text">Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.</p>
+<section id="statement">
+  <p class="section-label reveal">Statement</p>
+  <p class="intro-text reveal reveal-delay-1">Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.</p>
 </section>
 
 <section id="gallery">
-  <p class="section-label">Selected Work</p>
+  <p class="section-label reveal">Selected Work</p>
   <div class="gallery-grid" id="galleryGrid"></div>
 </section>
 
 <section id="featured">
-  <p class="section-label">Series</p>
+  <p class="section-label reveal">Series</p>
   <div class="featured-strip" id="featuredStrip"></div>
 </section>
 
 <section id="about">
-  <div class="about-image">
+  <div class="about-image reveal">
     <img src="https://www.dropbox.com/scl/fi/hz43gl77tut1f664aw2ex/Me.jpg?rlkey=ldn2hoeuyyo35tjjy1cbczjsd&st=kvwed8y1&raw=1" alt="Anders Gåhlin Dufberg">
   </div>
   <div class="about-content">
-    <p class="section-label">About</p>
-    <h2>Anders Gåhlin<br>Dufberg</h2>
-    <p>Photography, for me, is where creativity, instinct, and precision meet.</p>
-    <p>Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.</p>
-    <p>Clients choose me for photographs that feel personal, distinctive, and lasting.</p>
-    <div class="about-sig">Anders</div>
+    <p class="section-label reveal">About</p>
+    <h2 class="reveal reveal-delay-1">Anders Gåhlin<br>Dufberg</h2>
+    <p class="reveal reveal-delay-2">Photography, for me, is where creativity, instinct, and precision meet.</p>
+    <p class="reveal reveal-delay-3">Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.</p>
+    <p class="reveal">Clients choose me for photographs that feel personal, distinctive, and lasting.</p>
+    <div class="about-sig reveal">Anders</div>
   </div>
 </section>
 
 <section id="contact">
   <div class="contact-intro">
-    <p class="section-label">Contact</p>
-    <h2>Work<br>with me</h2>
-    <p>Open for portrait commissions,<br>editorial, and personal projects.</p>
-    <div class="contact-links">
+    <p class="section-label reveal">Contact</p>
+    <h2 class="reveal reveal-delay-1">Work<br>with me</h2>
+    <p class="reveal reveal-delay-2">Open for portrait commissions,<br>editorial, and personal projects.</p>
+    <div class="contact-links reveal reveal-delay-3">
       <a href="https://www.instagram.com/gaahlinphotography/" class="contact-link" target="_blank">Instagram</a>
       <a href="mailto:anders@gaahlin.com" class="contact-link">anders@gaahlin.com</a>
     </div>
   </div>
   <form id="contactForm" action="https://formspree.io/f/mbdwayzy" method="POST">
-    <div class="form-group"><label>Name</label><input type="text" name="name" required autocomplete="name"></div>
-    <div class="form-group"><label>Email</label><input type="email" name="email" required inputmode="email" autocomplete="email"></div>
-    <div class="form-group"><label>Message</label><textarea name="message" required></textarea></div>
-    <button type="submit" class="btn-submit">Send message</button>
+    <div class="form-group reveal"><label>Name</label><input type="text" name="name" required autocomplete="name"></div>
+    <div class="form-group reveal reveal-delay-1"><label>Email</label><input type="email" name="email" required inputmode="email" autocomplete="email"></div>
+    <div class="form-group reveal reveal-delay-2"><label>Message</label><textarea name="message" required></textarea></div>
+    <button type="submit" class="btn-submit reveal reveal-delay-3">Send message</button>
     <span class="submit-note" id="submitNote"></span>
   </form>
 </section>
@@ -247,169 +294,149 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 </div>
 
 <script>
+// ── CURSOR ──────────────────────────────────────────
+const dot = document.getElementById('cursorDot');
+const ring = document.getElementById('cursorRing');
+const label = document.getElementById('cursorLabel');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove', e => {
+  mx=e.clientX; my=e.clientY;
+  dot.style.left=mx+'px'; dot.style.top=my+'px';
+  label.style.left=mx+'px'; label.style.top=my+'px';
+});
+function animateRing(){
+  rx+=(mx-rx)*.12; ry+=(my-ry)*.12;
+  ring.style.left=rx+'px'; ring.style.top=ry+'px';
+  requestAnimationFrame(animateRing);
+}
+animateRing();
+document.querySelectorAll('.gallery-item,.strip-item').forEach(el => {
+  el.addEventListener('mouseenter',()=>document.body.classList.add('hovering-img'));
+  el.addEventListener('mouseleave',()=>document.body.classList.remove('hovering-img'));
+});
+
+// ── INTRO ANIMATION ─────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.getElementById('intro-screen').classList.add('open');
+    setTimeout(() => {
+      document.getElementById('introTextWrap').style.opacity = '0';
+      document.getElementById('introTextWrap').style.transition = 'opacity .4s';
+    }, 600);
+    setTimeout(() => {
+      document.getElementById('intro-screen').style.display = 'none';
+      document.getElementById('introTextWrap').style.display = 'none';
+      document.getElementById('mainNav').classList.add('visible');
+      document.getElementById('heroBottom').classList.add('visible');
+    }, 1400);
+  }, 900);
+});
+
+// ── PARALLAX HERO ────────────────────────────────────
+const heroImg = document.getElementById('heroImg');
+window.addEventListener('scroll', () => {
+  const y = window.scrollY;
+  heroImg.style.transform = `translateY(${y * 0.35}px)`;
+  document.getElementById('mainNav').classList.toggle('scrolled', y > 50);
+}, {passive:true});
+
+// ── SCROLL REVEAL ────────────────────────────────────
+const revealObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); }});
+}, {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ── PHOTOS ───────────────────────────────────────────
 const rawPhotos = [
   'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
   'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
   'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
   'https://www.dropbox.com/scl/fi/h2vup6u9ts5ar0f6zof4p/Eyes.jpg?rlkey=6ppnf3pnh000w9h8tnezv9h99&st=xiagsnl3&raw=1',
-  'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
-  'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
-  'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
-  'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
 ];
-
-// Extract filename from URL to deduplicate
 const getFilename = url => url.split('/').pop().split('?')[0];
 const seen = new Set();
-const photos = rawPhotos.filter(url => {
-  const name = getFilename(url);
-  if(seen.has(name)) return false;
-  seen.add(name);
-  return true;
-});
+const photos = rawPhotos.filter(url => { const n=getFilename(url); if(seen.has(n))return false; seen.add(n); return true; });
+
+// Preload first 2
+photos.slice(0,2).forEach(src => { const i=new Image(); i.src=src; });
+
+// Gallery
+const galleryObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting){ const img=e.target.querySelector('img'); if(img&&img.dataset.src){img.src=img.dataset.src;img.removeAttribute('data-src');galleryObserver.unobserve(e.target);}}});
+},{rootMargin:'200px'});
 
 const grid = document.getElementById('galleryGrid');
-
-// Preload first 2 images immediately
-photos.slice(0,2).forEach(src => { const i = new Image(); i.src = src; });
-
-// Intersection Observer for lazy loading
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if(entry.isIntersecting) {
-      const img = entry.target.querySelector('img');
-      if(img && img.dataset.src) {
-        img.src = img.dataset.src;
-        img.removeAttribute('data-src');
-        observer.unobserve(entry.target);
-      }
-    }
-  });
-}, { rootMargin: '200px' });
-
-photos.forEach((src, i) => {
+photos.forEach((src,i) => {
   const el = document.createElement('div');
-  el.className = 'gallery-item';
-  if(i < 2) {
-    el.innerHTML = `<img src="${src}" alt="Portrait ${i+1}">`;
-  } else {
-    el.innerHTML = `<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`;
-    observer.observe(el);
-  }
-  el.addEventListener('click', () => openLightbox(src));
+  el.className = 'gallery-item reveal';
+  if(i<2){ el.innerHTML=`<img src="${src}" alt="Portrait ${i+1}">`; }
+  else { el.innerHTML=`<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`; galleryObserver.observe(el); }
+  el.addEventListener('click',()=>openLightbox(src));
+  el.addEventListener('mouseenter',()=>document.body.classList.add('hovering-img'));
+  el.addEventListener('mouseleave',()=>document.body.classList.remove('hovering-img'));
   grid.appendChild(el);
+  revealObserver.observe(el);
 });
 
+// Strip
 const strip = document.getElementById('featuredStrip');
-photos.slice(0,5).forEach((src,i) => {
+photos.forEach((src,i) => {
   const el = document.createElement('div');
   el.className = 'strip-item';
-  el.innerHTML = `<img src="${src}" alt="Series ${i+1}" loading="lazy">`;
-  el.addEventListener('click', () => openLightbox(src));
+  el.innerHTML=`<img src="${src}" alt="Series ${i+1}" loading="lazy">`;
+  el.addEventListener('click',()=>openLightbox(src));
   strip.appendChild(el);
 });
 
-let currentIndex = 0;
-
-function openLightbox(src) {
-  currentIndex = photos.indexOf(src);
+// ── LIGHTBOX ─────────────────────────────────────────
+let currentIndex=0;
+function openLightbox(src){
+  currentIndex=photos.indexOf(src);
   showImage(currentIndex);
   document.getElementById('lightbox').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  document.body.style.overflow='hidden';
   buildDots();
 }
-
-function showImage(index) {
-  const img = document.getElementById('lightboxImg');
+function showImage(index){
+  const img=document.getElementById('lightboxImg');
   img.classList.remove('visible');
-
-  // Preload next and previous
-  const preloadNext = new Image();
-  preloadNext.src = photos[(index + 1) % photos.length];
-  const preloadPrev = new Image();
-  preloadPrev.src = photos[(index - 1 + photos.length) % photos.length];
-
-  setTimeout(() => {
-    img.src = photos[index];
-    img.onload = () => img.classList.add('visible');
-  }, 200);
-  document.getElementById('lbInfo').textContent = `${index + 1} / ${photos.length}`;
+  const pre1=new Image(); pre1.src=photos[(index+1)%photos.length];
+  const pre2=new Image(); pre2.src=photos[(index-1+photos.length)%photos.length];
+  setTimeout(()=>{ img.src=photos[index]; img.onload=()=>img.classList.add('visible'); },200);
+  document.getElementById('lbInfo').textContent=`${index+1} / ${photos.length}`;
   updateDots(index);
 }
-
-function navigateLightbox(dir) {
-  currentIndex = (currentIndex + dir + photos.length) % photos.length;
+function navigateLightbox(dir){
+  currentIndex=(currentIndex+dir+photos.length)%photos.length;
   showImage(currentIndex);
 }
-
-function buildDots() {
-  const c = document.getElementById('lbCounter');
-  c.innerHTML = '';
-  photos.forEach((_, i) => {
-    const d = document.createElement('div');
-    d.className = 'lb-dot' + (i === currentIndex ? ' active' : '');
-    d.onclick = () => { currentIndex = i; showImage(i); };
-    c.appendChild(d);
-  });
+function buildDots(){
+  const c=document.getElementById('lbCounter'); c.innerHTML='';
+  photos.forEach((_,i)=>{ const d=document.createElement('div'); d.className='lb-dot'+(i===currentIndex?' active':''); d.onclick=()=>{currentIndex=i;showImage(i);}; c.appendChild(d); });
 }
+function updateDots(i){ document.querySelectorAll('.lb-dot').forEach((d,j)=>d.classList.toggle('active',j===i)); }
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); document.getElementById('lightboxImg').classList.remove('visible'); document.body.style.overflow=''; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeLightbox(); if(e.key==='ArrowRight')navigateLightbox(1); if(e.key==='ArrowLeft')navigateLightbox(-1); });
+let tx=0;
+document.getElementById('lightbox').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+document.getElementById('lightbox').addEventListener('touchend',e=>{ const d=tx-e.changedTouches[0].clientX; if(Math.abs(d)>50)navigateLightbox(d>0?1:-1); },{passive:true});
 
-function updateDots(index) {
-  document.querySelectorAll('.lb-dot').forEach((d, i) => d.classList.toggle('active', i === index));
-}
+// ── NAV ──────────────────────────────────────────────
+const hamburger=document.getElementById('hamburger');
+const mobileMenu=document.getElementById('mobileMenu');
+hamburger.addEventListener('click',()=>{ hamburger.classList.toggle('open'); mobileMenu.classList.toggle('open'); document.body.style.overflow=mobileMenu.classList.contains('open')?'hidden':''; });
+document.querySelectorAll('.menu-link').forEach(l=>l.addEventListener('click',()=>{ hamburger.classList.remove('open'); mobileMenu.classList.remove('open'); document.body.style.overflow=''; }));
 
-function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('open');
-  document.getElementById('lightboxImg').classList.remove('visible');
-  document.body.style.overflow = '';
-}
-
-document.getElementById('lightbox').addEventListener('click', e => {
-  if(e.target === e.currentTarget || e.target.id === 'lightboxImg') return;
-});
-
-// Touch swipe
-let touchStartX = 0;
-document.getElementById('lightbox').addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, {passive:true});
-document.getElementById('lightbox').addEventListener('touchend', e => {
-  const diff = touchStartX - e.changedTouches[0].clientX;
-  if(Math.abs(diff) > 50) navigateLightbox(diff > 0 ? 1 : -1);
-}, {passive:true});
-
-document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') closeLightbox();
-  if(e.key === 'ArrowRight') navigateLightbox(1);
-  if(e.key === 'ArrowLeft') navigateLightbox(-1);
-});
-
-document.getElementById('contactForm').addEventListener('submit', async function(e) {
+// ── FORM ─────────────────────────────────────────────
+document.getElementById('contactForm').addEventListener('submit',async function(e){
   e.preventDefault();
-  const note = document.getElementById('submitNote');
-  const btn = document.querySelector('.btn-submit');
-  btn.textContent = 'Sending...';
-  try {
-    const res = await fetch(this.action, {method:'POST',body:new FormData(this),headers:{'Accept':'application/json'}});
-    note.textContent = res.ok ? 'Message sent — thank you.' : 'Something went wrong.';
-    if(res.ok) this.reset();
-  } catch { note.textContent = 'Something went wrong.'; }
-  btn.textContent = 'Send message';
-  setTimeout(() => note.textContent = '', 5000);
+  const note=document.getElementById('submitNote'); const btn=document.querySelector('.btn-submit');
+  btn.textContent='Sending...';
+  try{ const res=await fetch(this.action,{method:'POST',body:new FormData(this),headers:{'Accept':'application/json'}}); note.textContent=res.ok?'Message sent — thank you.':'Something went wrong.'; if(res.ok)this.reset(); }
+  catch{ note.textContent='Something went wrong.'; }
+  btn.textContent='Send message';
+  setTimeout(()=>note.textContent='',5000);
 });
-
-const nav = document.getElementById('mainNav');
-window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 50), {passive:true});
-
-const hamburger = document.getElementById('hamburger');
-const mobileMenu = document.getElementById('mobileMenu');
-hamburger.addEventListener('click', () => {
-  hamburger.classList.toggle('open');
-  mobileMenu.classList.toggle('open');
-  document.body.style.overflow = mobileMenu.classList.contains('open') ? 'hidden' : '';
-});
-document.querySelectorAll('.menu-link').forEach(l => l.addEventListener('click', () => {
-  hamburger.classList.remove('open');
-  mobileMenu.classList.remove('open');
-  document.body.style.overflow = '';
-}));
 </script>
 
 </body>

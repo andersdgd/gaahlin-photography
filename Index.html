@@ -394,7 +394,12 @@ buildLangButtons('mobileLang');
 setLang('sv');
 
 // ── PAGE LOAD ────────────────────────────────────────
+// ── SCROLL TO TOP ON LOAD ────────────────────────────
+history.scrollRestoration = 'manual';
+window.scrollTo(0, 0);
+
 document.addEventListener('DOMContentLoaded', () => {
+  window.scrollTo(0, 0);
   setTimeout(() => document.getElementById('page-wrap').classList.add('loaded'), 100);
 });
 

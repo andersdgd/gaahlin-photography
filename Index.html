@@ -102,11 +102,25 @@ footer{padding:2rem 3rem;border-top:1px solid rgba(255,255,255,.06);display:flex
 footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.25)}
 
 /* LIGHTBOX */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:1000;align-items:center;justify-content:center}
-.lightbox.open{display:flex}
-.lightbox img{max-width:92vw;max-height:92svh;object-fit:contain}
-.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.4);cursor:pointer;background:none;border:none;padding:.5rem;transition:color .3s}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0);z-index:1000;align-items:center;justify-content:center;transition:background .4s}
+.lightbox.open{display:flex;background:rgba(0,0,0,.97)}
+.lightbox-img-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.lightbox img{max-width:82vw;max-height:88svh;object-fit:contain;transition:opacity .3s,transform .3s;opacity:0;transform:scale(.97)}
+.lightbox img.visible{opacity:1;transform:scale(1)}
+.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;padding:.5rem;transition:color .3s;z-index:10}
 .lightbox-close:hover{color:#fff}
+.lb-arrow{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:1.5rem;z-index:10;display:flex;flex-direction:column;align-items:center;gap:.6rem;opacity:.35;transition:opacity .3s}
+.lb-arrow:hover{opacity:1}
+.lb-arrow-left{left:1.5rem}
+.lb-arrow-right{right:1.5rem}
+.lb-arrow svg{width:36px;height:36px;stroke:#fff;stroke-width:1;fill:none;transition:transform .3s}
+.lb-arrow-left:hover svg{transform:translateX(-4px)}
+.lb-arrow-right:hover svg{transform:translateX(4px)}
+.lb-arrow span{font-size:7px;letter-spacing:.4em;text-transform:uppercase;color:#fff}
+.lb-counter{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.5rem}
+.lb-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.25);transition:all .3s;cursor:pointer}
+.lb-dot.active{background:#fff;transform:scale(1.4)}
+.lb-info{position:absolute;bottom:3.5rem;right:2rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.3)}
 
 /* RESPONSIVE */
 @media(max-width:900px){
@@ -217,7 +231,19 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" onclick="closeLightbox()">Close</button>
-  <img id="lightboxImg" src="" alt="">
+  <button class="lb-arrow lb-arrow-left" onclick="navigateLightbox(-1)">
+    <svg viewBox="0 0 40 40"><line x1="28" y1="20" x2="12" y2="20"/><polyline points="19,13 12,20 19,27"/></svg>
+    <span>Prev</span>
+  </button>
+  <div class="lightbox-img-wrap">
+    <img id="lightboxImg" src="" alt="">
+  </div>
+  <button class="lb-arrow lb-arrow-right" onclick="navigateLightbox(1)">
+    <svg viewBox="0 0 40 40"><line x1="12" y1="20" x2="28" y2="20"/><polyline points="21,13 28,20 21,27"/></svg>
+    <span>Next</span>
+  </button>
+  <div class="lb-counter" id="lbCounter"></div>
+  <div class="lb-info" id="lbInfo"></div>
 </div>
 
 <script>
@@ -250,19 +276,70 @@ photos.slice(0,5).forEach((src,i) => {
   strip.appendChild(el);
 });
 
+let currentIndex = 0;
+
 function openLightbox(src) {
-  document.getElementById('lightboxImg').src = src;
+  currentIndex = photos.indexOf(src);
+  showImage(currentIndex);
   document.getElementById('lightbox').classList.add('open');
   document.body.style.overflow = 'hidden';
+  buildDots();
 }
+
+function showImage(index) {
+  const img = document.getElementById('lightboxImg');
+  img.classList.remove('visible');
+  setTimeout(() => {
+    img.src = photos[index];
+    img.onload = () => img.classList.add('visible');
+  }, 200);
+  document.getElementById('lbInfo').textContent = `${index + 1} / ${photos.length}`;
+  updateDots(index);
+}
+
+function navigateLightbox(dir) {
+  currentIndex = (currentIndex + dir + photos.length) % photos.length;
+  showImage(currentIndex);
+}
+
+function buildDots() {
+  const c = document.getElementById('lbCounter');
+  c.innerHTML = '';
+  photos.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'lb-dot' + (i === currentIndex ? ' active' : '');
+    d.onclick = () => { currentIndex = i; showImage(i); };
+    c.appendChild(d);
+  });
+}
+
+function updateDots(index) {
+  document.querySelectorAll('.lb-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+}
+
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightboxImg').classList.remove('visible');
   document.body.style.overflow = '';
 }
+
 document.getElementById('lightbox').addEventListener('click', e => {
-  if(e.target===e.currentTarget) closeLightbox();
+  if(e.target === e.currentTarget || e.target.id === 'lightboxImg') return;
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape') closeLightbox(); });
+
+// Touch swipe
+let touchStartX = 0;
+document.getElementById('lightbox').addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, {passive:true});
+document.getElementById('lightbox').addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if(Math.abs(diff) > 50) navigateLightbox(diff > 0 ? 1 : -1);
+}, {passive:true});
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeLightbox();
+  if(e.key === 'ArrowRight') navigateLightbox(1);
+  if(e.key === 'ArrowLeft') navigateLightbox(-1);
+});
 
 document.getElementById('contactForm').addEventListener('submit', async function(e) {
   e.preventDefault();

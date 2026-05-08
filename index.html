@@ -1,21 +1,5 @@
-<!-- Gaahlin Photography v2.1 -->
-
 <!DOCTYPE html>
 
-<html lang="sv">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gaahlin Photography</title>
-<style>
-html,body{margin:0;padding:0;background:#080808;color:#fff;font-family:sans-serif}
-h1{color:#fff;text-align:center;padding-top:40vh;font-size:3rem;letter-spacing:.2em}
-</style>
-</head>
-<body>
-<h1>GAAHLIN</h1>
-</body>
-</html>
 <html lang="sv">
 <head>
 <meta charset="UTF-8">
@@ -28,54 +12,54 @@ h1{color:#fff;text-align:center;padding-top:40vh;font-size:3rem;letter-spacing:.
 html{scroll-behavior:smooth;background:#080808}
 body{background:#080808;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
-/* LANGUAGE SWITCHER */
-.lang-switcher{position:relative}
-.lang-current{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;color:rgba(255,255,255,.5);transition:color .3s;-webkit-tap-highlight-color:transparent}
-.lang-current:hover{color:#fff}
-.lang-current-flag{width:18px;height:12px;border-radius:1px;overflow:hidden;display:block}
-.lang-current-code{font-size:8px;letter-spacing:.3em;text-transform:uppercase}
-.lang-current-arrow{font-size:8px;opacity:.4;transition:transform .3s}
-.lang-switcher.open .lang-current-arrow{transform:rotate(180deg)}
-.lang-dropdown{position:absolute;top:calc(100% + .8rem);right:0;background:rgba(12,12,12,.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.06);min-width:140px;opacity:0;pointer-events:none;transform:translateY(-8px);transition:opacity .3s,transform .3s;z-index:200}
-.lang-switcher.open .lang-dropdown{opacity:1;pointer-events:all;transform:translateY(0)}
-.lang-option{display:flex;align-items:center;gap:.8rem;padding:.9rem 1.2rem;cursor:pointer;transition:background .2s;border-bottom:1px solid rgba(255,255,255,.04)}
-.lang-option:last-child{border-bottom:none}
-.lang-option:hover{background:rgba(255,255,255,.05)}
-.lang-option.active{background:rgba(255,255,255,.04)}
-.lang-flag{width:20px;height:13px;border-radius:1px;overflow:hidden;display:block;flex-shrink:0}
-.lang-name{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.6)}
-.lang-option.active .lang-name{color:#fff}
-.lang-option:hover .lang-name{color:#fff}
-
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.8rem 3rem;transition:padding .4s,background .4s}
 nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.nav-left{display:flex;align-items:center;gap:2rem}
 .nav-logo{font-family:‘IM Fell English’,serif;font-size:13px;letter-spacing:.25em;text-transform:uppercase;color:#fff;text-decoration:none}
 .nav-links{display:flex;gap:2.5rem;list-style:none}
 .nav-links a{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
 .nav-links a:hover{color:#fff}
 .nav-right{display:flex;align-items:center;gap:1.5rem}
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;z-index:101;-webkit-tap-highlight-color:transparent}
+
+/* LANGUAGE DROPDOWN */
+.lang-switcher{position:relative}
+.lang-current{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;color:rgba(255,255,255,.5);transition:color .3s;-webkit-tap-highlight-color:transparent}
+.lang-current:hover{color:#fff}
+.lang-current-flag{width:18px;height:12px;border-radius:1px;overflow:hidden;display:block;flex-shrink:0}
+.lang-current-code{font-size:8px;letter-spacing:.3em;text-transform:uppercase}
+.lang-arrow{font-size:8px;opacity:.4;transition:transform .3s;display:inline-block}
+.lang-switcher.open .lang-arrow{transform:rotate(180deg)}
+.lang-dropdown{position:absolute;top:calc(100% + .8rem);right:0;background:rgba(10,10,10,.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.06);min-width:140px;opacity:0;pointer-events:none;transform:translateY(-6px);transition:opacity .25s,transform .25s;z-index:200}
+.lang-switcher.open .lang-dropdown{opacity:1;pointer-events:all;transform:translateY(0)}
+.lang-option{display:flex;align-items:center;gap:.8rem;padding:.85rem 1.2rem;cursor:pointer;transition:background .2s;border-bottom:1px solid rgba(255,255,255,.04)}
+.lang-option:last-child{border-bottom:none}
+.lang-option:hover,.lang-option.active{background:rgba(255,255,255,.05)}
+.lang-flag{width:20px;height:13px;border-radius:1px;overflow:hidden;display:block;flex-shrink:0}
+.lang-name{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.lang-option:hover .lang-name,.lang-option.active .lang-name{color:#fff}
+
+/* HAMBURGER */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;-webkit-tap-highlight-color:transparent}
 .hamburger span{display:block;width:22px;height:1px;background:#fff;transition:all .3s}
 .hamburger.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
 .hamburger.open span:nth-child(2){opacity:0}
 .hamburger.open span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 .mobile-menu{position:fixed;inset:0;background:rgba(8,8,8,.98);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5rem;opacity:0;pointer-events:none;transition:opacity .3s}
 .mobile-menu.open{opacity:1;pointer-events:all}
-.mobile-menu a{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
-.mobile-menu a:active{color:#fff}
-.mobile-lang{display:flex;gap:1rem;margin-top:1.5rem;padding-top:2rem;border-top:1px solid rgba(255,255,255,.08)}
+.mobile-menu a{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none}
+.mobile-lang{display:flex;gap:.5rem;margin-top:2rem;padding-top:2rem;border-top:1px solid rgba(255,255,255,.08)}
+.mobile-lang-btn{background:none;border:1px solid rgba(255,255,255,.1);padding:.5rem .8rem;cursor:pointer;display:flex;align-items:center;gap:.5rem;-webkit-tap-highlight-color:transparent;transition:border-color .3s}
+.mobile-lang-btn.active{border-color:rgba(255,255,255,.4)}
+.mobile-lang-btn span{font-size:8px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.mobile-lang-btn.active span{color:#fff}
+.mobile-flag{width:18px;height:12px;border-radius:1px;overflow:hidden;display:block}
 
 /* HERO */
 #hero{position:relative;height:100svh;overflow:hidden}
 .hero-img{width:100%;height:120%;object-fit:cover;object-position:center top;filter:brightness(.72);will-change:transform}
 .hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(8,8,8,.8) 100%)}
-.hero-bottom{position:absolute;bottom:0;left:0;right:0;padding:3rem;display:flex;justify-content:space-between;align-items:flex-end}
-.hero-title{font-family:‘IM Fell English’,serif;font-size:clamp(2.5rem,6vw,5rem);font-weight:400;letter-spacing:.15em;text-transform:uppercase;line-height:1;color:#fff}
-.hero-title em{font-style:italic;opacity:.65;font-size:75%;display:block;margin-top:.3rem}
-.hero-meta{text-align:right}
-.hero-meta p{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);line-height:2.2}
+.hero-bottom{position:absolute;bottom:0;left:0;right:0;padding:3rem;display:flex;justify-content:flex-end;align-items:flex-end}
+.hero-meta p{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.45);line-height:2.2;text-align:right}
 .hero-scroll{position:absolute;bottom:3rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.8rem;opacity:.35}
 .hero-scroll span{font-size:8px;letter-spacing:.4em;text-transform:uppercase}
 .scroll-arrow{width:1px;height:40px;background:linear-gradient(to bottom,transparent,#fff);animation:arrowPulse 2s ease-in-out infinite}
@@ -118,7 +102,7 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(8,8,8,.95);backdrop-filter:blur
 
 /* ABOUT */
 #about{display:grid;grid-template-columns:1fr 1fr;min-height:80vh;border-top:1px solid rgba(255,255,255,.06)}
-.about-image{position:relative;overflow:hidden}
+.about-image{overflow:hidden}
 .about-image img{width:100%;height:100%;object-fit:cover;filter:grayscale(15%) brightness(.85)}
 .about-content{padding:6rem 4rem;display:flex;flex-direction:column;justify-content:center;background:#0d0d0d}
 .about-content h2{font-family:‘IM Fell English’,serif;font-size:clamp(1.8rem,2.8vw,3rem);font-weight:400;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2.5rem;line-height:1.1;margin-top:1rem}
@@ -152,38 +136,35 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 /* LIGHTBOX */
 .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:1000;align-items:center;justify-content:center}
 .lightbox.open{display:flex}
-.lightbox-img-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.lightbox-img-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
 #lightboxImg{max-width:82vw;max-height:88svh;object-fit:contain;transition:opacity .3s,transform .3s;opacity:0;transform:scale(.97)}
 #lightboxImg.visible{opacity:1;transform:scale(1)}
-.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;padding:.5rem;transition:color .3s;z-index:10}
-.lightbox-close:hover{color:#fff}
-.lb-arrow{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:1.5rem;z-index:10;display:flex;flex-direction:column;align-items:center;gap:.6rem;opacity:.3;transition:opacity .3s;-webkit-tap-highlight-color:transparent}
+.lightbox-close{position:absolute;top:calc(1.5rem + env(safe-area-inset-top));right:1.5rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;padding:.5rem;z-index:10}
+.lb-arrow{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:1.5rem;z-index:10;opacity:.3;transition:opacity .3s;-webkit-tap-highlight-color:transparent}
 .lb-arrow:hover,.lb-arrow:active{opacity:1}
 .lb-arrow-left{left:0}
 .lb-arrow-right{right:0}
-.lb-arrow svg{width:36px;height:36px;stroke:#fff;stroke-width:1;fill:none;transition:transform .3s}
-.lb-counter{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.6rem}
+.lb-arrow svg{width:36px;height:36px;stroke:#fff;stroke-width:1;fill:none}
+.lb-counter{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;gap:.6rem}
 .lb-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);transition:all .3s;cursor:pointer}
 .lb-dot.active{background:#fff;transform:scale(1.5)}
 .lb-info{position:absolute;bottom:3.5rem;right:2rem;font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.3)}
 
 /* RESPONSIVE */
 @media(max-width:900px){
-.nav-links{display:none}
+.nav-links,.lang-switcher{display:none}
 .hamburger{display:flex}
-.lang-switcher{display:none}
 #about{grid-template-columns:1fr}
 .about-image{height:60vw}
 #contact{grid-template-columns:1fr;gap:4rem;padding:5rem 3rem}
-.hero-bottom{flex-direction:column;align-items:flex-start;gap:1rem}
-.hero-meta{text-align:left}
+.hero-bottom{padding:1.5rem}
 }
 @media(max-width:600px){
 nav{padding:1.2rem 1.5rem;padding-top:calc(1.2rem + env(safe-area-inset-top))}
 nav.scrolled{padding:.9rem 1.5rem}
 #gallery,#contact,#statement{padding-left:1.5rem;padding-right:1.5rem}
-#featured .section-label,#featured .featured-strip{padding-left:1.5rem;padding-right:1.5rem}
-.hero-bottom{padding:1.5rem}
+#featured .section-label{padding-left:1.5rem}
+.featured-strip{padding-left:1.5rem}
 .about-content{padding:3rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }
@@ -194,9 +175,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 <div id="page-wrap">
 
 <nav id="mainNav">
-  <div class="nav-left">
-    <a href="#hero" class="nav-logo">Gaahlin</a>
-  </div>
+  <a href="#hero" class="nav-logo">Gaahlin</a>
   <ul class="nav-links">
     <li><a href="#gallery" data-i18n="nav_work">Work</a></li>
     <li><a href="#about" data-i18n="nav_about">About</a></li>
@@ -207,11 +186,11 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
       <button class="lang-current" id="langCurrent">
         <span class="lang-current-flag" id="langCurrentFlag"></span>
         <span class="lang-current-code" id="langCurrentCode">SV</span>
-        <span class="lang-current-arrow">▾</span>
+        <span class="lang-arrow">▾</span>
       </button>
       <div class="lang-dropdown" id="langDropdown"></div>
     </div>
-    <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+    <button class="hamburger" id="hamburger"><span></span><span></span><span></span></button>
   </div>
 </nav>
 
@@ -237,7 +216,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 
 <section id="statement">
   <p class="section-label reveal" data-i18n="label_statement">Statement</p>
-  <p class="intro-text reveal reveal-delay-1" data-i18n="statement_text">Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.</p>
+  <p class="intro-text reveal reveal-delay-1" data-i18n="statement_text">Photography, for me, is where creativity, instinct, and precision meet.</p>
 </section>
 
 <section id="gallery">
@@ -258,7 +237,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
     <p class="section-label reveal" data-i18n="label_about">About</p>
     <h2 class="reveal reveal-delay-1">Anders Gåhlin<br>Dufberg</h2>
     <p class="reveal reveal-delay-2" data-i18n="about_p1">Photography, for me, is where creativity, instinct, and precision meet.</p>
-    <p class="reveal reveal-delay-3" data-i18n="about_p2">Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.</p>
+    <p class="reveal reveal-delay-3" data-i18n="about_p2">Images do more than document a moment.</p>
     <p class="reveal" data-i18n="about_p3">Clients choose me for photographs that feel personal, distinctive, and lasting.</p>
     <div class="about-sig reveal">Anders</div>
   </div>
@@ -268,7 +247,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
   <div class="contact-intro">
     <p class="section-label reveal" data-i18n="label_contact">Contact</p>
     <h2 class="reveal reveal-delay-1" data-i18n="contact_heading">Work<br>with me</h2>
-    <p class="reveal reveal-delay-2" data-i18n="contact_sub">Open for portrait commissions,<br>editorial, and personal projects.</p>
+    <p class="reveal reveal-delay-2" data-i18n="contact_sub">Open for portrait commissions.</p>
     <div class="contact-links reveal reveal-delay-3">
       <a href="https://www.instagram.com/gaahlinphotography/" class="contact-link" target="_blank">Instagram</a>
       <a href="mailto:anders@gaahlin.com" class="contact-link">anders@gaahlin.com</a>
@@ -276,7 +255,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
   </div>
   <form id="contactForm" action="https://formspree.io/f/mbdwayzy" method="POST">
     <div class="form-group reveal"><label data-i18n="form_name">Name</label><input type="text" name="name" required autocomplete="name"></div>
-    <div class="form-group reveal reveal-delay-1"><label data-i18n="form_email">Email</label><input type="email" name="email" required inputmode="email" autocomplete="email"></div>
+    <div class="form-group reveal reveal-delay-1"><label data-i18n="form_email">Email</label><input type="email" name="email" required inputmode="email"></div>
     <div class="form-group reveal reveal-delay-2"><label data-i18n="form_message">Message</label><textarea name="message" required></textarea></div>
     <button type="submit" class="btn-submit reveal reveal-delay-3" data-i18n="form_send">Send message</button>
     <span class="submit-note" id="submitNote"></span>
@@ -288,241 +267,159 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
   <p>Stockholm, Sweden</p>
 </footer>
 
-</div><!-- end page-wrap -->
+</div>
 
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" onclick="closeLightbox()" data-i18n="close">Close</button>
-  <button class="lb-arrow lb-arrow-left" onclick="navigateLightbox(-1)">
-    <svg viewBox="0 0 40 40"><line x1="28" y1="20" x2="12" y2="20"/><polyline points="19,13 12,20 19,27"/></svg>
-  </button>
+  <button class="lb-arrow lb-arrow-left" onclick="navigateLightbox(-1)"><svg viewBox="0 0 40 40"><line x1="28" y1="20" x2="12" y2="20"/><polyline points="19,13 12,20 19,27"/></svg></button>
   <div class="lightbox-img-wrap"><img id="lightboxImg" src="" alt=""></div>
-  <button class="lb-arrow lb-arrow-right" onclick="navigateLightbox(1)">
-    <svg viewBox="0 0 40 40"><line x1="12" y1="20" x2="28" y2="20"/><polyline points="21,13 28,20 21,27"/></svg>
-  </button>
+  <button class="lb-arrow lb-arrow-right" onclick="navigateLightbox(1)"><svg viewBox="0 0 40 40"><line x1="12" y1="20" x2="28" y2="20"/><polyline points="21,13 28,20 21,27"/></svg></button>
   <div class="lb-counter" id="lbCounter"></div>
   <div class="lb-info" id="lbInfo"></div>
 </div>
 
 <script>
-// ── TRANSLATIONS ─────────────────────────────────────
-const langs = {
-  sv: {
-    code:'sv', label:'SV',
-    nav_work:'Arbeten', nav_about:'Om mig', nav_contact:'Kontakt',
-    hero_genre:'Porträtt', scroll:'Scrolla',
-    label_statement:'Manifest', label_work:'Utvalda Arbeten', label_series:'Serie',
-    label_about:'Om mig', label_contact:'Kontakt',
-    statement_text:'Fotografi är för mig där kreativitet, instinkt och precision möts — bilder som bevarar känsla, atmosfär och identitet.',
-    about_p1:'Fotografi är för mig där kreativitet, instinkt och precision möts.',
-    about_p2:'Bilder gör mer än att dokumentera ett ögonblick. De bevarar känsla, atmosfär och identitet med klarhet, djup och intention.',
-    about_p3:'Kunder väljer mig för fotografier som känns personliga, distinkta och varaktiga.',
-    contact_heading:'Arbeta<br>med mig', contact_sub:'Öppen för porträttuppdrag,<br>editorial och personliga projekt.',
-    form_name:'Namn', form_email:'E-post', form_message:'Meddelande', form_send:'Skicka meddelande',
-    close:'Stäng', sent:'Meddelande skickat — tack.', error:'Något gick fel.'
-  },
-  no: {
-    code:'no', label:'NO',
-    nav_work:'Arbeider', nav_about:'Om meg', nav_contact:'Kontakt',
-    hero_genre:'Portrett', scroll:'Rull',
-    label_statement:'Manifest', label_work:'Utvalgte Arbeider', label_series:'Serie',
-    label_about:'Om meg', label_contact:'Kontakt',
-    statement_text:'Fotografering er for meg der kreativitet, instinkt og presisjon møtes — bilder som bevarer følelse, atmosfære og identitet.',
-    about_p1:'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',
-    about_p2:'Bilder gjør mer enn å dokumentere et øyeblikk. De bevarer følelse, atmosfære og identitet med klarhet, dybde og intensjon.',
-    about_p3:'Kunder velger meg for fotografier som føles personlige, særegne og varige.',
-    contact_heading:'Jobb<br>med meg', contact_sub:'Åpen for portrettoppdrag,<br>editorial og personlige prosjekter.',
-    form_name:'Navn', form_email:'E-post', form_message:'Melding', form_send:'Send melding',
-    close:'Lukk', sent:'Melding sendt — takk.', error:'Noe gikk galt.'
-  },
-  dk: {
-    code:'dk', label:'DK',
-    nav_work:'Arbejder', nav_about:'Om mig', nav_contact:'Kontakt',
-    hero_genre:'Portræt', scroll:'Rul',
-    label_statement:'Manifest', label_work:'Udvalgte Arbejder', label_series:'Serie',
-    label_about:'Om mig', label_contact:'Kontakt',
-    statement_text:'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes — billeder der bevarer følelse, atmosfære og identitet.',
-    about_p1:'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',
-    about_p2:'Billeder gør mere end at dokumentere et øjeblik. De bevarer følelse, atmosfære og identitet med klarhed, dybde og intention.',
-    about_p3:'Kunder vælger mig for fotografier, der føles personlige, distinkte og varige.',
-    contact_heading:'Arbejd<br>med mig', contact_sub:'Åben for portrætopgaver,<br>editorial og personlige projekter.',
-    form_name:'Navn', form_email:'E-mail', form_message:'Besked', form_send:'Send besked',
-    close:'Luk', sent:'Besked sendt — tak.', error:'Noget gik galt.'
-  },
-  fi: {
-    code:'fi', label:'FI',
-    nav_work:'Työt', nav_about:'Minusta', nav_contact:'Yhteystiedot',
-    hero_genre:'Muotokuva', scroll:'Vieritä',
-    label_statement:'Manifesti', label_work:'Valitut Työt', label_series:'Sarja',
-    label_about:'Minusta', label_contact:'Yhteystiedot',
-    statement_text:'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat — kuvia, jotka säilyttävät tunteen, tunnelman ja identiteetin.',
-    about_p1:'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',
-    about_p2:'Kuvat tekevät enemmän kuin dokumentoivat hetken. Ne säilyttävät tunteen, tunnelman ja identiteetin selkeydellä, syvyydellä ja tarkoituksella.',
-    about_p3:'Asiakkaat valitsevat minut valokuvista, jotka tuntuvat henkilökohtaisilta, erottuvaisilta ja kestäviltä.',
-    contact_heading:'Tee töitä<br>kanssani', contact_sub:'Avoin muotokuvatöille,<br>editorialille ja henkilökohtaisille projekteille.',
-    form_name:'Nimi', form_email:'Sähköposti', form_message:'Viesti', form_send:'Lähetä viesti',
-    close:'Sulje', sent:'Viesti lähetetty — kiitos.', error:'Jokin meni pieleen.'
-  },
-  en: {
-    code:'en', label:'EN',
-    nav_work:'Work', nav_about:'About', nav_contact:'Contact',
-    hero_genre:'Portrait', scroll:'Scroll',
-    label_statement:'Statement', label_work:'Selected Work', label_series:'Series',
-    label_about:'About', label_contact:'Contact',
-    statement_text:'Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.',
-    about_p1:'Photography, for me, is where creativity, instinct, and precision meet.',
-    about_p2:'Images do more than document a moment. They preserve feeling, atmosphere, and identity with clarity, depth, and intention.',
-    about_p3:'Clients choose me for photographs that feel personal, distinctive, and lasting.',
-    contact_heading:'Work<br>with me', contact_sub:'Open for portrait commissions,<br>editorial, and personal projects.',
-    form_name:'Name', form_email:'Email', form_message:'Message', form_send:'Send message',
-    close:'Close', sent:'Message sent — thank you.', error:'Something went wrong.'
-  }
+const flags={
+  sv:`<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#006AA7"/><rect x="6" width="3" height="15" fill="#FECC02"/><rect y="6" width="22" height="3" fill="#FECC02"/></svg>`,
+  no:`<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#EF2B2D"/><rect x="6" width="3" height="15" fill="#fff"/><rect y="6" width="22" height="3" fill="#fff"/><rect x="7" width="1" height="15" fill="#002868"/><rect y="7" width="22" height="1" fill="#002868"/></svg>`,
+  dk:`<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#C60C30"/><rect x="7" width="3" height="15" fill="#fff"/><rect y="6" width="22" height="3" fill="#fff"/></svg>`,
+  fi:`<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#fff"/><rect x="5" width="3" height="15" fill="#003580"/><rect y="5.5" width="22" height="4" fill="#003580"/></svg>`,
+  en:`<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#012169"/><line x1="0" y1="0" x2="22" y2="15" stroke="#fff" stroke-width="3"/><line x1="22" y1="0" x2="0" y2="15" stroke="#fff" stroke-width="3"/><line x1="0" y1="0" x2="22" y2="15" stroke="#C8102E" stroke-width="1.5"/><line x1="22" y1="0" x2="0" y2="15" stroke="#C8102E" stroke-width="1.5"/><rect x="9" width="4" height="15" fill="#fff"/><rect y="5.5" width="22" height="4" fill="#fff"/><rect x="9.8" width="2.4" height="15" fill="#C8102E"/><rect y="6.3" width="22" height="2.4" fill="#C8102E"/></svg>`
 };
 
-// Flag SVGs
-const flags = {
-  sv: `<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#006AA7"/><rect x="6" width="3" height="15" fill="#FECC02"/><rect y="6" width="22" height="3" fill="#FECC02"/></svg>`,
-  no: `<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#EF2B2D"/><rect x="6" width="3" height="15" fill="#fff"/><rect y="6" width="22" height="3" fill="#fff"/><rect x="7" width="1" height="15" fill="#002868"/><rect y="7" width="22" height="1" fill="#002868"/></svg>`,
-  dk: `<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#C60C30"/><rect x="7" width="3" height="15" fill="#fff"/><rect y="6" width="22" height="3" fill="#fff"/></svg>`,
-  fi: `<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#fff"/><rect x="5" width="3" height="15" fill="#003580"/><rect y="5.5" width="22" height="4" fill="#003580"/></svg>`,
-  en: `<svg viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg"><rect width="22" height="15" fill="#012169"/><line x1="0" y1="0" x2="22" y2="15" stroke="#fff" stroke-width="3"/><line x1="22" y1="0" x2="0" y2="15" stroke="#fff" stroke-width="3"/><line x1="0" y1="0" x2="22" y2="15" stroke="#C8102E" stroke-width="1.5"/><line x1="22" y1="0" x2="0" y2="15" stroke="#C8102E" stroke-width="1.5"/><rect x="9" width="4" height="15" fill="#fff"/><rect y="5.5" width="22" height="4" fill="#fff"/><rect x="9.8" width="2.4" height="15" fill="#C8102E"/><rect y="6.3" width="22" height="2.4" fill="#C8102E"/></svg>`
+const langs={
+  sv:{label:'SV',name:'Svenska',nav_work:'Arbeten',nav_about:'Om mig',nav_contact:'Kontakt',hero_genre:'Porträtt',scroll:'Scrolla',label_statement:'Manifest',label_work:'Utvalda Arbeten',label_series:'Serie',label_about:'Om mig',label_contact:'Kontakt',statement_text:'Fotografi är för mig där kreativitet, instinkt och precision möts — bilder som bevarar känsla, atmosfär och identitet.',about_p1:'Fotografi är för mig där kreativitet, instinkt och precision möts.',about_p2:'Bilder gör mer än att dokumentera ett ögonblick. De bevarar känsla, atmosfär och identitet.',about_p3:'Kunder väljer mig för fotografier som känns personliga, distinkta och varaktiga.',contact_heading:'Arbeta<br>med mig',contact_sub:'Öppen för porträttuppdrag,<br>editorial och personliga projekt.',form_name:'Namn',form_email:'E-post',form_message:'Meddelande',form_send:'Skicka meddelande',close:'Stäng',sent:'Meddelande skickat — tack.',error:'Något gick fel.'},
+  no:{label:'NO',name:'Norsk',nav_work:'Arbeider',nav_about:'Om meg',nav_contact:'Kontakt',hero_genre:'Portrett',scroll:'Rull',label_statement:'Manifest',label_work:'Utvalgte Arbeider',label_series:'Serie',label_about:'Om meg',label_contact:'Kontakt',statement_text:'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',about_p1:'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',about_p2:'Bilder gjør mer enn å dokumentere et øyeblikk.',about_p3:'Kunder velger meg for fotografier som føles personlige og varige.',contact_heading:'Jobb<br>med meg',contact_sub:'Åpen for portrettoppdrag<br>og personlige prosjekter.',form_name:'Navn',form_email:'E-post',form_message:'Melding',form_send:'Send melding',close:'Lukk',sent:'Melding sendt — takk.',error:'Noe gikk galt.'},
+  dk:{label:'DK',name:'Dansk',nav_work:'Arbejder',nav_about:'Om mig',nav_contact:'Kontakt',hero_genre:'Portræt',scroll:'Rul',label_statement:'Manifest',label_work:'Udvalgte Arbejder',label_series:'Serie',label_about:'Om mig',label_contact:'Kontakt',statement_text:'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',about_p1:'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',about_p2:'Billeder gør mere end at dokumentere et øjeblik.',about_p3:'Kunder vælger mig for fotografier, der føles personlige og varige.',contact_heading:'Arbejd<br>med mig',contact_sub:'Åben for portrætopgaver<br>og personlige projekter.',form_name:'Navn',form_email:'E-mail',form_message:'Besked',form_send:'Send besked',close:'Luk',sent:'Besked sendt — tak.',error:'Noget gik galt.'},
+  fi:{label:'FI',name:'Suomi',nav_work:'Työt',nav_about:'Minusta',nav_contact:'Yhteystiedot',hero_genre:'Muotokuva',scroll:'Vieritä',label_statement:'Manifesti',label_work:'Valitut Työt',label_series:'Sarja',label_about:'Minusta',label_contact:'Yhteystiedot',statement_text:'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',about_p1:'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',about_p2:'Kuvat tekevät enemmän kuin dokumentoivat hetken.',about_p3:'Asiakkaat valitsevat minut henkilökohtaisista valokuvista.',contact_heading:'Tee töitä<br>kanssani',contact_sub:'Avoin muotokuvatöille<br>ja henkilökohtaisille projekteille.',form_name:'Nimi',form_email:'Sähköposti',form_message:'Viesti',form_send:'Lähetä viesti',close:'Sulje',sent:'Viesti lähetetty — kiitos.',error:'Jokin meni pieleen.'},
+  en:{label:'EN',name:'English',nav_work:'Work',nav_about:'About',nav_contact:'Contact',hero_genre:'Portrait',scroll:'Scroll',label_statement:'Statement',label_work:'Selected Work',label_series:'Series',label_about:'About',label_contact:'Contact',statement_text:'Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.',about_p1:'Photography, for me, is where creativity, instinct, and precision meet.',about_p2:'Images do more than document a moment. They preserve feeling, atmosphere, and identity.',about_p3:'Clients choose me for photographs that feel personal, distinctive, and lasting.',contact_heading:'Work<br>with me',contact_sub:'Open for portrait commissions,<br>editorial, and personal projects.',form_name:'Name',form_email:'Email',form_message:'Message',form_send:'Send message',close:'Close',sent:'Message sent — thank you.',error:'Something went wrong.'}
 };
 
-let currentLang = 'sv';
+let currentLang='sv';
 
-function buildLangButtons(containerId) {
-  const c = document.getElementById(containerId);
-  if(!c) return;
-  c.innerHTML = '';
-  Object.keys(langs).forEach(key => {
-    const opt = document.createElement('div');
-    opt.className = 'lang-option' + (key === currentLang ? ' active' : '');
-    opt.setAttribute('data-lang', key);
-    opt.innerHTML = `<span class="lang-flag">${flags[key]}</span><span class="lang-name">${langs[key].fullname||langs[key].label}</span>`;
-    opt.addEventListener('click', () => { setLang(key); closeLangDropdown(); });
-    c.appendChild(opt);
+function buildDropdown(){
+  const d=document.getElementById('langDropdown');
+  d.innerHTML='';
+  Object.keys(langs).forEach(k=>{
+    const o=document.createElement('div');
+    o.className='lang-option'+(k===currentLang?' active':'');
+    o.dataset.lang=k;
+    o.innerHTML=`<span class="lang-flag">${flags[k]}</span><span class="lang-name">${langs[k].name}</span>`;
+    o.addEventListener('click',()=>{setLang(k);document.getElementById('langSwitcher').classList.remove('open');});
+    d.appendChild(o);
   });
 }
 
-function closeLangDropdown() {
-  document.getElementById('langSwitcher').classList.remove('open');
+function buildMobileLang(){
+  const c=document.getElementById('mobileLang');
+  c.innerHTML='';
+  Object.keys(langs).forEach(k=>{
+    const b=document.createElement('button');
+    b.className='mobile-lang-btn'+(k===currentLang?' active':'');
+    b.dataset.lang=k;
+    b.innerHTML=`<span class="mobile-flag">${flags[k]}</span><span>${langs[k].label}</span>`;
+    b.addEventListener('click',()=>{setLang(k);buildMobileLang();});
+    c.appendChild(b);
+  });
 }
 
-document.getElementById('langCurrent').addEventListener('click', (e) => {
+function setLang(code){
+  currentLang=code;
+  const t=langs[code];
+  document.documentElement.lang=code;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(t[k]!==undefined)el.innerHTML=t[k];});
+  document.querySelectorAll('.lang-option').forEach(o=>o.classList.toggle('active',o.dataset.lang===code));
+  document.getElementById('langCurrentFlag').innerHTML=flags[code];
+  document.getElementById('langCurrentCode').textContent=t.label;
+}
+
+buildDropdown();
+buildMobileLang();
+setLang('sv');
+
+document.getElementById('langCurrent').addEventListener('click',e=>{
   e.stopPropagation();
   document.getElementById('langSwitcher').classList.toggle('open');
 });
+document.addEventListener('click',()=>document.getElementById('langSwitcher').classList.remove('open'));
 
-document.addEventListener('click', closeLangDropdown);
-
-function setLang(code) {
-  currentLang = code;
-  const t = langs[code];
-  document.documentElement.lang = code;
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if(t[key] !== undefined) el.innerHTML = t[key];
-  });
-  // Update dropdown active states
-  document.querySelectorAll('.lang-option').forEach(opt => {
-    opt.classList.toggle('active', opt.getAttribute('data-lang') === code);
-  });
-  // Update current button
-  document.getElementById('langCurrentFlag').innerHTML = flags[code];
-  document.getElementById('langCurrentCode').textContent = t.label;
-}
-
-buildLangButtons('langSwitcher');
-buildLangButtons('mobileLang');
-setLang('sv');
-
-// ── PAGE LOAD ────────────────────────────────────────
-// ── SCROLL TO TOP ON LOAD ────────────────────────────
-history.scrollRestoration = 'manual';
-window.scrollTo(0, 0);
-
-document.addEventListener('DOMContentLoaded', () => {
-  window.scrollTo(0, 0);
-  setTimeout(() => document.getElementById('page-wrap').classList.add('loaded'), 100);
+// PAGE LOAD
+document.addEventListener('DOMContentLoaded',()=>{
+  history.scrollRestoration='manual';
+  window.scrollTo(0,0);
+  setTimeout(()=>document.getElementById('page-wrap').classList.add('loaded'),100);
 });
 
-// ── SCROLL REVEAL ────────────────────────────────────
-const revealObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if(e.isIntersecting){ e.target.classList.add('visible'); revealObserver.unobserve(e.target); }
-  });
-}, {threshold:0.05, rootMargin:'0px 0px -30px 0px'});
-document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+// SCROLL
+const heroImg=document.getElementById('heroImg');
+window.addEventListener('scroll',()=>{
+  if(window.innerWidth>900)heroImg.style.transform=`translateY(${window.scrollY*.3}px)`;
+  document.getElementById('mainNav').classList.toggle('scrolled',window.scrollY>50);
+},{passive:true});
 
-// ── PARALLAX (desktop only) ──────────────────────────
-const heroImg = document.getElementById('heroImg');
-window.addEventListener('scroll', () => {
-  if(window.innerWidth > 900) heroImg.style.transform = `translateY(${window.scrollY * 0.3}px)`;
-  document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 50);
-}, {passive:true});
+// REVEAL
+const ro=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');ro.unobserve(e.target);}});},{threshold:0.05,rootMargin:'0px 0px -30px 0px'});
+document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
 
-// ── PHOTOS ───────────────────────────────────────────
-const rawPhotos = [
+// PHOTOS
+const rawPhotos=[
   'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
   'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
   'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
   'https://www.dropbox.com/scl/fi/h2vup6u9ts5ar0f6zof4p/Eyes.jpg?rlkey=6ppnf3pnh000w9h8tnezv9h99&st=xiagsnl3&raw=1',
 ];
-const getFilename = url => url.split('/').pop().split('?')[0];
-const seen = new Set();
-const photos = rawPhotos.filter(url => { const n=getFilename(url); if(seen.has(n))return false; seen.add(n); return true; });
+const seen=new Set();
+const photos=rawPhotos.filter(u=>{const n=u.split('/').pop().split('?')[0];if(seen.has(n))return false;seen.add(n);return true;});
+photos.slice(0,2).forEach(s=>{const i=new Image();i.src=s;});
 
-photos.slice(0,2).forEach(src => { const i=new Image(); i.src=src; });
+const go=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const img=e.target.querySelector('img');if(img&&img.dataset.src){img.src=img.dataset.src;img.removeAttribute('data-src');go.unobserve(e.target);}}});},{rootMargin:'200px'});
 
-const galleryObserver = new IntersectionObserver(entries => {
-  entries.forEach(e => { if(e.isIntersecting){ const img=e.target.querySelector('img'); if(img&&img.dataset.src){img.src=img.dataset.src;img.removeAttribute('data-src');galleryObserver.unobserve(e.target);}}});
-},{rootMargin:'200px'});
-
-const grid = document.getElementById('galleryGrid');
-photos.forEach((src,i) => {
-  const el = document.createElement('div');
-  el.className = 'gallery-item reveal';
-  if(i<2){ el.innerHTML=`<img src="${src}" alt="Portrait ${i+1}">`; }
-  else { el.innerHTML=`<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`; galleryObserver.observe(el); }
+const grid=document.getElementById('galleryGrid');
+photos.forEach((src,i)=>{
+  const el=document.createElement('div');
+  el.className='gallery-item reveal';
+  if(i<2){el.innerHTML=`<img src="${src}" alt="Portrait ${i+1}">`;}
+  else{el.innerHTML=`<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`;go.observe(el);}
   el.addEventListener('click',()=>openLightbox(src));
   grid.appendChild(el);
-  revealObserver.observe(el);
+  ro.observe(el);
 });
 
-const strip = document.getElementById('featuredStrip');
-photos.forEach((src,i) => {
-  const el = document.createElement('div');
-  el.className = 'strip-item';
+const strip=document.getElementById('featuredStrip');
+photos.forEach((src,i)=>{
+  const el=document.createElement('div');
+  el.className='strip-item';
   el.innerHTML=`<img src="${src}" alt="Series ${i+1}" loading="lazy">`;
   el.addEventListener('click',()=>openLightbox(src));
   strip.appendChild(el);
 });
 
-// ── LIGHTBOX ─────────────────────────────────────────
-let currentIndex=0;
-function openLightbox(src){ currentIndex=photos.indexOf(src); showImage(currentIndex); document.getElementById('lightbox').classList.add('open'); document.body.style.overflow='hidden'; buildDots(); }
-function showImage(index){ const img=document.getElementById('lightboxImg'); img.classList.remove('visible'); [1,-1].forEach(d=>{const p=new Image();p.src=photos[(index+d+photos.length)%photos.length];}); setTimeout(()=>{img.src=photos[index];img.onload=()=>img.classList.add('visible');},200); document.getElementById('lbInfo').textContent=`${index+1} / ${photos.length}`; updateDots(index); }
-function navigateLightbox(dir){ currentIndex=(currentIndex+dir+photos.length)%photos.length; showImage(currentIndex); }
-function buildDots(){ const c=document.getElementById('lbCounter');c.innerHTML='';photos.forEach((_,i)=>{const d=document.createElement('div');d.className='lb-dot'+(i===currentIndex?' active':'');d.onclick=()=>{currentIndex=i;showImage(i);};c.appendChild(d);}); }
-function updateDots(i){ document.querySelectorAll('.lb-dot').forEach((d,j)=>d.classList.toggle('active',j===i)); }
-function closeLightbox(){ document.getElementById('lightbox').classList.remove('open');document.getElementById('lightboxImg').classList.remove('visible');document.body.style.overflow=''; }
+// LIGHTBOX
+let ci=0;
+function openLightbox(src){ci=photos.indexOf(src);showImg(ci);document.getElementById('lightbox').classList.add('open');document.body.style.overflow='hidden';buildDots();}
+function showImg(i){const img=document.getElementById('lightboxImg');img.classList.remove('visible');[1,-1].forEach(d=>{const p=new Image();p.src=photos[(i+d+photos.length)%photos.length];});setTimeout(()=>{img.src=photos[i];img.onload=()=>img.classList.add('visible');},200);document.getElementById('lbInfo').textContent=`${i+1} / ${photos.length}`;updateDots(i);}
+function navigateLightbox(d){ci=(ci+d+photos.length)%photos.length;showImg(ci);}
+function buildDots(){const c=document.getElementById('lbCounter');c.innerHTML='';photos.forEach((_,i)=>{const d=document.createElement('div');d.className='lb-dot'+(i===ci?' active':'');d.onclick=()=>{ci=i;showImg(i);};c.appendChild(d);});}
+function updateDots(i){document.querySelectorAll('.lb-dot').forEach((d,j)=>d.classList.toggle('active',j===i));}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open');document.getElementById('lightboxImg').classList.remove('visible');document.body.style.overflow='';}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();if(e.key==='ArrowRight')navigateLightbox(1);if(e.key==='ArrowLeft')navigateLightbox(-1);});
 let tx=0;
 document.getElementById('lightbox').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
 document.getElementById('lightbox').addEventListener('touchend',e=>{const d=tx-e.changedTouches[0].clientX;if(Math.abs(d)>50)navigateLightbox(d>0?1:-1);},{passive:true});
 
-// ── NAV ──────────────────────────────────────────────
-const hamburger=document.getElementById('hamburger');
-const mobileMenu=document.getElementById('mobileMenu');
-hamburger.addEventListener('click',()=>{ hamburger.classList.toggle('open');mobileMenu.classList.toggle('open');document.body.style.overflow=mobileMenu.classList.contains('open')?'hidden':''; });
-document.querySelectorAll('.menu-link').forEach(l=>l.addEventListener('click',()=>{ hamburger.classList.remove('open');mobileMenu.classList.remove('open');document.body.style.overflow=''; }));
+// NAV
+const hb=document.getElementById('hamburger');
+const mm=document.getElementById('mobileMenu');
+hb.addEventListener('click',()=>{hb.classList.toggle('open');mm.classList.toggle('open');document.body.style.overflow=mm.classList.contains('open')?'hidden':'';});
+document.querySelectorAll('.menu-link').forEach(l=>l.addEventListener('click',()=>{hb.classList.remove('open');mm.classList.remove('open');document.body.style.overflow='';}));
 
-// ── FORM ─────────────────────────────────────────────
+// FORM
 document.getElementById('contactForm').addEventListener('submit',async function(e){
   e.preventDefault();
   const note=document.getElementById('submitNote');const btn=document.querySelector('.btn-submit');const t=langs[currentLang];
   btn.textContent='...';
-  try{ const res=await fetch(this.action,{method:'POST',body:new FormData(this),headers:{'Accept':'application/json'}}); note.textContent=res.ok?t.sent:t.error; if(res.ok)this.reset(); }
-  catch{ note.textContent=t.error; }
+  try{const res=await fetch(this.action,{method:'POST',body:new FormData(this),headers:{'Accept':'application/json'}});note.textContent=res.ok?t.sent:t.error;if(res.ok)this.reset();}
+  catch{note.textContent=t.error;}
   btn.textContent=t.form_send;
   setTimeout(()=>note.textContent='',5000);
 });

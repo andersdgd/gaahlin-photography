@@ -344,9 +344,9 @@ document.getElementById('langCurrent').addEventListener('click',e=>{
 document.addEventListener('click',()=>document.getElementById('langSwitcher').classList.remove('open'));
 
 // PAGE LOAD
-document.addEventListener('DOMContentLoaded',()=>{
-  history.scrollRestoration='manual';
-  window.scrollTo(0,0);
+history.scrollRestoration='manual';
+window.addEventListener('load',()=>{
+  window.scrollTo({top:0,left:0,behavior:'instant'});
   setTimeout(()=>document.getElementById('page-wrap').classList.add('loaded'),100);
 });
 

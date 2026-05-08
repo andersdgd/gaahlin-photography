@@ -259,10 +259,33 @@ const photos = [
 ];
 
 const grid = document.getElementById('galleryGrid');
-photos.forEach((src,i) => {
+
+// Preload first 2 images immediately
+photos.slice(0,2).forEach(src => { const i = new Image(); i.src = src; });
+
+// Intersection Observer for lazy loading
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if(entry.isIntersecting) {
+      const img = entry.target.querySelector('img');
+      if(img && img.dataset.src) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+        observer.unobserve(entry.target);
+      }
+    }
+  });
+}, { rootMargin: '200px' });
+
+photos.forEach((src, i) => {
   const el = document.createElement('div');
   el.className = 'gallery-item';
-  el.innerHTML = `<img src="${src}" alt="Portrait ${i+1}" loading="${i<3?'eager':'lazy'}">`;
+  if(i < 2) {
+    el.innerHTML = `<img src="${src}" alt="Portrait ${i+1}">`;
+  } else {
+    el.innerHTML = `<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`;
+    observer.observe(el);
+  }
   el.addEventListener('click', () => openLightbox(src));
   grid.appendChild(el);
 });
@@ -289,6 +312,13 @@ function openLightbox(src) {
 function showImage(index) {
   const img = document.getElementById('lightboxImg');
   img.classList.remove('visible');
+
+  // Preload next and previous
+  const preloadNext = new Image();
+  preloadNext.src = photos[(index + 1) % photos.length];
+  const preloadPrev = new Image();
+  preloadPrev.src = photos[(index - 1 + photos.length) % photos.length];
+
   setTimeout(() => {
     img.src = photos[index];
     img.onload = () => img.classList.add('visible');

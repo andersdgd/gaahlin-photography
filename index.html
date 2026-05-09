@@ -168,7 +168,7 @@ nav.scrolled{padding:.9rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }
 </style>
-<link rel="preload" as="image" href="https://www.dropbox.com/scl/fi/pizn67h4d06kny5us22q0/me_bw.jpg?rlkey=bexn5itd51yikuajf1u7o1q54&raw=1">
+<link rel="preload" as="image" href="images/me_bw.jpg">
 </head>
 <body>
 <div id="page-wrap">
@@ -201,7 +201,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 </div>
 
 <section id="hero">
-  <img class="hero-img" id="heroImg" src="https://www.dropbox.com/scl/fi/pizn67h4d06kny5us22q0/me_bw.jpg?rlkey=bexn5itd51yikuajf1u7o1q54&raw=1" alt="Gaahlin Photography" fetchpriority="high" decoding="sync">
+  <img class="hero-img" id="heroImg" src="images/me_bw.jpg" alt="Gaahlin Photography" fetchpriority="high" decoding="sync">
   <div class="hero-overlay"></div>
   <div class="hero-bottom">
     <div class="hero-meta">
@@ -230,7 +230,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 
 <section id="about">
   <div class="about-image reveal">
-    <img src="https://www.dropbox.com/scl/fi/1vgmsudus9mab4y7uaa4a/me.jpg?rlkey=c5bdsu1g1teckxhwi5zaps8rc&raw=1" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async">
+    <img src="images/me.jpg" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async">
   </div>
   <div class="about-content">
     <p class="section-label reveal" data-i18n="label_about">About</p>
@@ -377,14 +377,14 @@ document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
 
 // PHOTOS
 const rawPhotos=[
-  'https://www.dropbox.com/scl/fi/onnjfxl06rbcyum694934/Gallery1.jpg?rlkey=8rf1ecz70h7d20rbzwn0fm4we&raw=1',
-  'https://www.dropbox.com/scl/fi/2untq7t3hpsr7umch7lnu/Gallery2.jpg?rlkey=g8cptfojs54rra1pkit7xqh8p&raw=1',
-  'https://www.dropbox.com/scl/fi/tevfat0qck95xq72poh9t/Gallery3.jpg?rlkey=vh0x5c2ap8hvgn3pxcujgbj5h&raw=1',
-  'https://www.dropbox.com/scl/fi/yc5hho52gryxzqymtnf8m/Gallery4.jpg?rlkey=gkkkyvqcpdfm370vf8e117jk4&raw=1',
-  'https://www.dropbox.com/scl/fi/425rscu31r85attu4yxs8/Gallery5.jpg?rlkey=nwi51qsaxzax6xvikct0vw0ol&raw=1',
-  'https://www.dropbox.com/scl/fi/0yf53g3vf4z7hadqbd6py/Gallery6.jpg?rlkey=el3dvrb1g3u7moge1i7ixo4il&raw=1',
-  'https://www.dropbox.com/scl/fi/06xsiwz72x1zf5jq7jh5m/Gallery7.jpg?rlkey=gxwmxmv17zgvctlemf9aszg92&raw=1',
-  'https://www.dropbox.com/scl/fi/2mqkre81cwcem655detmx/Gallery8.jpg?rlkey=bcxi0stzpxlsvcy1v3x40gq4l&raw=1',
+  'images/Gallery1.jpg',
+  'images/Gallery2.jpg',
+  'images/Gallery3.jpg',
+  'images/Gallery4.jpg',
+  'images/Gallery5.jpg',
+  'images/Gallery6.jpg',
+  'images/Gallery7.jpg',
+  'images/Gallery8.jpg',
 ];
 const seen=new Set();
 const photos=rawPhotos.filter(u=>{const n=u.split('/').pop().split('?')[0];if(seen.has(n))return false;seen.add(n);return true;});

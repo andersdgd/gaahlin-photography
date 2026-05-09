@@ -369,10 +369,14 @@ document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
 
 // PHOTOS
 const rawPhotos=[
-  'https://www.dropbox.com/scl/fi/bvfpce19f7r96594p9czy/_H2A5435-Edit_-2.jpg?rlkey=biexolrmggg19nj26io49tde4&st=mv1wml3a&raw=1',
-  'https://www.dropbox.com/scl/fi/9eui1x6o1f4r6vctwkm7m/_H2A2055.jpg?rlkey=xb7ayqj3kkskk4mdnpusi8z49&st=ixn2z2gz&raw=1',
-  'https://www.dropbox.com/scl/fi/u54nutx8whfyaxbcjmkme/_H2A5391.jpg?rlkey=odsr5suij4o0kmmktfg9gqn3r&st=p2ksjtmg&raw=1',
-  'https://www.dropbox.com/scl/fi/h2vup6u9ts5ar0f6zof4p/Eyes.jpg?rlkey=6ppnf3pnh000w9h8tnezv9h99&st=xiagsnl3&raw=1',
+  'https://www.dropbox.com/scl/fi/onnjfxl06rbcyum694934/Gallery1.jpg?rlkey=8rf1ecz70h7d20rbzwn0fm4we&raw=1',
+  'https://www.dropbox.com/scl/fi/2untq7t3hpsr7umch7lnu/Gallery2.jpg?rlkey=g8cptfojs54rra1pkit7xqh8p&raw=1',
+  'https://www.dropbox.com/scl/fi/tevfat0qck95xq72poh9t/Gallery3.jpg?rlkey=vh0x5c2ap8hvgn3pxcujgbj5h&raw=1',
+  'https://www.dropbox.com/scl/fi/yc5hho52gryxzqymtnf8m/Gallery4.jpg?rlkey=gkkkyvqcpdfm370vf8e117jk4&raw=1',
+  'https://www.dropbox.com/scl/fi/425rscu31r85attu4yxs8/Gallery5.jpg?rlkey=nwi51qsaxzax6xvikct0vw0ol&raw=1',
+  'https://www.dropbox.com/scl/fi/0yf53g3vf4z7hadqbd6py/Gallery6.jpg?rlkey=el3dvrb1g3u7moge1i7ixo4il&raw=1',
+  'https://www.dropbox.com/scl/fi/06xsiwz72x1zf5jq7jh5m/Gallery7.jpg?rlkey=gxwmxmv17zgvctlemf9aszg92&raw=1',
+  'https://www.dropbox.com/scl/fi/2mqkre81cwcem655detmx/Gallery8.jpg?rlkey=bcxi0stzpxlsvcy1v3x40gq4l&raw=1',
 ];
 const seen=new Set();
 const photos=rawPhotos.filter(u=>{const n=u.split('/').pop().split('?')[0];if(seen.has(n))return false;seen.add(n);return true;});

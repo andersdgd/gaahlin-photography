@@ -168,11 +168,12 @@ nav.scrolled{padding:.9rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }
 </style>
+<link rel="preload" as="image" href="https://www.dropbox.com/scl/fi/pizn67h4d06kny5us22q0/me_bw.jpg?rlkey=bexn5itd51yikuajf1u7o1q54&raw=1">
 </head>
 <body>
 <div id="page-wrap">
 
-<nav id="mainNav">
+<nav id="mainNav" style="position:fixed;top:0;left:0;right:0;z-index:100">
   <a href="#hero" class="nav-logo">Gaahlin</a>
   <ul class="nav-links">
     <li><a href="#gallery" data-i18n="nav_work">Work</a></li>
@@ -200,7 +201,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 </div>
 
 <section id="hero">
-  <img class="hero-img" id="heroImg" src="https://www.dropbox.com/scl/fi/pizn67h4d06kny5us22q0/me_bw.jpg?rlkey=bexn5itd51yikuajf1u7o1q54&raw=1" alt="Gaahlin Photography">
+  <img class="hero-img" id="heroImg" src="https://www.dropbox.com/scl/fi/pizn67h4d06kny5us22q0/me_bw.jpg?rlkey=bexn5itd51yikuajf1u7o1q54&raw=1" alt="Gaahlin Photography" fetchpriority="high" decoding="sync">
   <div class="hero-overlay"></div>
   <div class="hero-bottom">
     <div class="hero-meta">
@@ -229,7 +230,7 @@ footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 
 <section id="about">
   <div class="about-image reveal">
-    <img src="https://www.dropbox.com/scl/fi/1vgmsudus9mab4y7uaa4a/me.jpg?rlkey=c5bdsu1g1teckxhwi5zaps8rc&raw=1" alt="Anders Gåhlin Dufberg">
+    <img src="https://www.dropbox.com/scl/fi/1vgmsudus9mab4y7uaa4a/me.jpg?rlkey=c5bdsu1g1teckxhwi5zaps8rc&raw=1" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async">
   </div>
   <div class="about-content">
     <p class="section-label reveal" data-i18n="label_about">About</p>
@@ -347,20 +348,27 @@ window.addEventListener('load',()=>{
   setTimeout(()=>document.getElementById('page-wrap').classList.add('loaded'),100);
 });
 
-// SCROLL
+// SCROLL — throttled with RAF
 const heroImg=document.getElementById('heroImg');
 const heroSection=document.getElementById('hero');
+let ticking=false;
 window.addEventListener('scroll',()=>{
-  const y=window.scrollY;
-  const h=heroSection.offsetHeight;
-  const progress=Math.min(y/h,1);
-  if(window.innerWidth>900){
-    heroImg.style.transform=`scale(${1-progress*0.08}) translateY(${y*.15}px)`;
-  } else {
-    heroImg.style.transform=`scale(${1-progress*0.06})`;
+  if(!ticking){
+    requestAnimationFrame(()=>{
+      const y=window.scrollY;
+      const h=heroSection.offsetHeight;
+      const progress=Math.min(y/h,1);
+      if(window.innerWidth>900){
+        heroImg.style.transform=`scale(${1-progress*0.08}) translateY(${y*.15}px)`;
+      } else {
+        heroImg.style.transform=`scale(${1-progress*0.06})`;
+      }
+      heroImg.style.opacity=1-progress*0.85;
+      document.getElementById('mainNav').classList.toggle('scrolled',y>50);
+      ticking=false;
+    });
+    ticking=true;
   }
-  heroImg.style.opacity=1-progress*0.85;
-  document.getElementById('mainNav').classList.toggle('scrolled',y>50);
 },{passive:true});
 
 // REVEAL
@@ -388,8 +396,12 @@ const grid=document.getElementById('galleryGrid');
 photos.forEach((src,i)=>{
   const el=document.createElement('div');
   el.className='gallery-item reveal';
-  if(i<2){el.innerHTML=`<img src="${src}" alt="Portrait ${i+1}">`;}
-  else{el.innerHTML=`<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" style="min-height:200px;background:%23111">`;go.observe(el);}
+  if(i<3){
+    el.innerHTML=`<img src="${src}" alt="Portrait ${i+1}" decoding="async">`;
+  } else {
+    el.innerHTML=`<img data-src="${src}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Portrait ${i+1}" decoding="async" style="min-height:200px;background:%23111">`;
+    go.observe(el);
+  }
   el.addEventListener('click',()=>openLightbox(src));
   grid.appendChild(el);
   ro.observe(el);

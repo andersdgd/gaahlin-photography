@@ -1,4 +1,3 @@
-FILE: src/BookingPage.jsx
 // Gaahlin Photography — BookingPage.jsx (publik bokningsförfrågan, /boka)
 // v0.1.0 — Arc 5: besökaren skickar en bokningsförfrågan (typ, önskat datum,
 //   detaljer) → insert i gaahlin.bookings (RLS tillåter anon insert). Landar i

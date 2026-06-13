@@ -1,4 +1,3 @@
-FILE: src/App.jsx
 // Gaahlin Photography — App.jsx (router)
 // v0.8.0 — Arc 5: publik bokningssida på /boka.
 //   "/"        → publik portfolio (PublicSite)

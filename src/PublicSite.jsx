@@ -1,4 +1,3 @@
-FILE: src/PublicSite.jsx
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
 // v0.7.1 — Arc 5: "Boka"-länk i nav + mobilmeny → /boka.
 // v0.7.0 — galleriet är nu DB-/Storage-drivet (CMS). Hämtar publika gallerier +

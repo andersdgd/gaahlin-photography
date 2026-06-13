@@ -1,4 +1,6 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.11.0 — Arc 5: Bokningar-sektion (gaahlin.bookings) — inkomna förfrågningar
+//   från sidan /boka, med statushantering (ny/bekräftad/genomförd/avböjd) + radera.
 // v0.10.0 — Arc 3 / B08 skiva 3b: Kunder + privata leveranser i adminet.
 //   • "Kunder"-sektionen: lista + bjud in kund (e-post + namn → edge function
 //     'invite-client'; service_role skapar auth-användare + clients-rad + mejl).
@@ -54,6 +56,7 @@ const ui = {
 
 const SECTIONS = [
   { id: 'kontakter', label: 'Kontakter' },
+  { id: 'bokningar', label: 'Bokningar' },
   { id: 'bilder', label: 'Bilder & gallerier' },
   { id: 'kunder', label: 'Kunder' },
 ]
@@ -260,6 +263,7 @@ export default function AdminApp() {
 
       <main style={{ flex: 1, padding: '28px 32px', minWidth: 0 }}>
         {section === 'kontakter' && <Kontakter />}
+        {section === 'bokningar' && <Bookings />}
         {section === 'bilder' && <GalleryManager />}
         {section === 'kunder' && <ClientManager />}
       </main>
@@ -298,6 +302,98 @@ function Kontakter() {
           </div>
           <a href={`mailto:${r.email}`} style={{ color: '#8ab4f8', fontSize: '13px', textDecoration: 'none' }}>{r.email}</a>
           <p style={{ margin: '8px 0 0', color: '#cfcfcf', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{r.message}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ---------------- Bokningar ---------------- */
+
+function Bookings() {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const STATUSES = [
+    { id: 'ny', label: 'Ny' },
+    { id: 'bekräftad', label: 'Bekräftad' },
+    { id: 'genomförd', label: 'Genomförd' },
+    { id: 'avböjd', label: 'Avböjd' },
+  ]
+  const statusColor = (s) =>
+    s === 'bekräftad' ? '#7ec699' : s === 'genomförd' ? '#8ab4f8' : s === 'avböjd' ? '#c98a8a' : '#d8b878'
+
+  const load = async () => {
+    const { data, error } = await supabase.from('bookings').select('*').order('created_at', { ascending: false })
+    if (error) { setError(error.message); return }
+    setRows(data || [])
+  }
+  useEffect(() => { load() }, [])
+
+  const changeStatus = async (row, status) => {
+    if (busy || row.status === status) return
+    setBusy(true); setError('')
+    const { error } = await supabase.from('bookings').update({ status }).eq('id', row.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, status } : r)))
+  }
+
+  const remove = async (row) => {
+    if (busy) return
+    setBusy(true); setError('')
+    const { error } = await supabase.from('bookings').delete().eq('id', row.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setRows((rs) => rs.filter((r) => r.id !== row.id))
+  }
+
+  return (
+    <div>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Bokningar</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 24px' }}>Inkomna bokningsförfrågningar från sidan /boka. Sätt status allteftersom.</p>
+      {error && <p style={ui.err}>{error}</p>}
+      {rows === null && !error && <p style={ui.muted}>Laddar…</p>}
+      {rows && rows.length === 0 && <p style={ui.muted}>Inga bokningsförfrågningar än.</p>}
+      {rows && rows.map((r) => (
+        <div key={r.id} style={{ borderBottom: '1px solid #1c1c1c', padding: '18px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '8px', alignItems: 'baseline' }}>
+            <span style={{ ...ui.serif, fontSize: '17px', color: '#fff' }}>
+              {r.name}
+              {r.shoot_type ? <span style={{ ...ui.muted, fontSize: '13px', fontFamily: 'system-ui, sans-serif' }}> · {r.shoot_type}</span> : null}
+            </span>
+            <span style={{ ...ui.muted, fontSize: '12px', whiteSpace: 'nowrap' }}>{new Date(r.created_at).toLocaleString('sv-SE')}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: r.message ? '10px' : '14px' }}>
+            <a href={`mailto:${r.email}`} style={{ color: '#8ab4f8', fontSize: '13px', textDecoration: 'none' }}>{r.email}</a>
+            {r.phone && <a href={`tel:${r.phone}`} style={{ color: '#8ab4f8', fontSize: '13px', textDecoration: 'none' }}>{r.phone}</a>}
+            {r.preferred_date && <span style={{ ...ui.muted, fontSize: '13px' }}>Önskat datum: {r.preferred_date}</span>}
+          </div>
+          {r.message && <p style={{ margin: '0 0 14px', color: '#cfcfcf', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{r.message}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {STATUSES.map((s) => {
+              const active = r.status === s.id
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => changeStatus(r, s.id)}
+                  disabled={busy}
+                  style={{
+                    background: active ? statusColor(s.id) : 'none',
+                    color: active ? '#000' : statusColor(s.id),
+                    border: `1px solid ${statusColor(s.id)}`,
+                    borderRadius: '999px', padding: '5px 12px', fontSize: '12px',
+                    cursor: busy ? 'default' : 'pointer',
+                  }}
+                >
+                  {s.label}
+                </button>
+              )
+            })}
+            <span style={{ flex: 1 }} />
+            <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => remove(r)} disabled={busy}>Radera</button>
+          </div>
         </div>
       ))}
     </div>

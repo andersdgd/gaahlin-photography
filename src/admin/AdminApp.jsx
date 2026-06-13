@@ -1,5 +1,7 @@
 // Gaahlin Photography — admin/AdminApp.jsx
-// v0.6.0 — B06 skiva 1: admin-skalet.
+// v0.6.1 — B06 skiva 1: admin-skalet.
+//   FIX v0.6.1: admin-kollen körs inte längre inuti onAuthStateChange-låset
+//   (gav token-lös/deadlockad roles-läsning efter magisk-länk → falsk "ej admin").
 //   1. Ingen session  → inloggning via magisk länk (Supabase Auth signInWithOtp).
 //   2. Session, ej admin → meddelande + logga ut.
 //   3. Session + admin  → skal med fyra sektioner i sidopanelen.
@@ -30,28 +32,40 @@ const SECTIONS = [
 
 export default function AdminApp() {
   const [status, setStatus] = useState('loading') // loading | noconfig | anon | notadmin | admin
-  const [session, setSession] = useState(null)
+  const [session, setSession] = useState(undefined) // undefined = ej avgjort, null = utloggad, objekt = inloggad
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [section, setSection] = useState('kontakter')
 
+  // 1) Etablera sessionen. VIKTIGT: i onAuthStateChange-callbacken gör vi BARA
+  //    setState — aldrig andra supabase-anrop. Callbacken körs i ett internt
+  //    auth-lås (navigator.locks); ett dataanrop därinne (t.ex. .from('roles'))
+  //    körs då utan token / kan deadlocka. Det var precis det som gjorde att
+  //    admin-kollen föll igenom efter magisk-länk-inloggning fast DB:n sa admin.
   useEffect(() => {
     if (!supabase) { setStatus('noconfig'); return }
     let active = true
-
-    const resolve = async (sess) => {
-      if (!active) return
-      setSession(sess)
-      if (!sess) { setStatus('anon'); return }
-      const { data } = await supabase.from('roles').select('role').eq('user_id', sess.user.id).maybeSingle()
-      if (!active) return
-      setStatus(data && data.role === 'admin' ? 'admin' : 'notadmin')
-    }
-
-    supabase.auth.getSession().then(({ data }) => resolve(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => resolve(sess))
+    supabase.auth.getSession().then(({ data }) => { if (active) setSession(data.session) })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => { if (active) setSession(sess) })
     return () => { active = false; sub.subscription.unsubscribe() }
   }, [])
+
+  // 2) Kör admin-kollen UTANFÖR auth-låset, när sessionen ändras. Som vanlig
+  //    React-effekt körs detta efter render, då låset redan släppts → .from()
+  //    får med din inloggade token → RLS släpper fram din rad i gaahlin.roles.
+  useEffect(() => {
+    if (!supabase) return
+    if (session === undefined) return            // väntar fortfarande på getSession
+    if (session === null) { setStatus('anon'); return }
+    let active = true
+    supabase.from('roles').select('role').eq('user_id', session.user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error) { console.error('[admin] roles-koll misslyckades:', error); setStatus('notadmin'); return }
+        setStatus(data && data.role === 'admin' ? 'admin' : 'notadmin')
+      })
+    return () => { active = false }
+  }, [session])
 
   const sendLink = async () => {
     if (!email.trim()) return

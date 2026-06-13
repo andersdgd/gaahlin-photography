@@ -1,13 +1,16 @@
 // Gaahlin Photography — App.jsx
-// v0.4.0 — B02 leverans 3+4+5+6 sammanslagna: komplett public-portering.
+// v0.5.0 — B05: kontaktformuläret skickar nu till Supabase (gaahlin.contacts)
+// istället för Formspree. Ny import av Supabase-klienten (src/lib/supabase.js).
+// Allt övrigt oförändrat sedan v0.4.0 (utseende, sektioner, lightbox, i18n).
 // Inkluderar: nav (med språkväxlare), mobilmeny (med lang), hero, statement, gallery
 // (8 bilder, lazy-load past first 3), featured (horisontell strip), about, contact
-// (Formspree till mbdwayzy + Instagram-länk), footer, lightbox (tangentbord + swipe + dots).
+// (Supabase-insert + Instagram-länk), footer, lightbox (tangentbord + swipe + dots).
 // 5 språk: SV/NO/DK/FI/EN. Default svensk.
 // Utseende bevarat exakt från ursprungs-index.html.
 
 import { useEffect, useRef, useState } from 'react'
 import './index.css'
+import { supabase } from './lib/supabase'
 
 // SVG-flaggor (rena, samma proportioner som ursprungs-index.html)
 const flags = {
@@ -330,14 +333,20 @@ export default function App() {
     if (isSubmitting) return
     setIsSubmitting(true)
     const form = e.currentTarget
+    const data = new FormData(form)
+    const payload = {
+      name: (data.get('name') || '').toString().trim(),
+      email: (data.get('email') || '').toString().trim(),
+      message: (data.get('message') || '').toString().trim(),
+    }
     try {
-      const res = await fetch('https://formspree.io/f/mbdwayzy', {
-        method: 'POST',
-        body: new FormData(form),
-        headers: { Accept: 'application/json' },
-      })
-      setSubmitNote(res.ok ? t.sent : t.error)
-      if (res.ok) form.reset()
+      if (!supabase) throw new Error('Supabase ej konfigurerad')
+      // Default-schema är 'gaahlin' (satt i src/lib/supabase.js) → gaahlin.contacts.
+      // RLS tillåter publik insert; ingen läsning sker härifrån.
+      const { error } = await supabase.from('contacts').insert(payload)
+      if (error) throw error
+      setSubmitNote(t.sent)
+      form.reset()
     } catch {
       setSubmitNote(t.error)
     } finally {

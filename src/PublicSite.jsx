@@ -1,11 +1,11 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
-// v0.6.0 — utbruten oförändrad från App.jsx för att ge plats åt routing.
-// Identiskt innehåll och utseende som v0.5.0; enda skillnaden är komponentnamnet
-// (App → PublicSite) och att den nu renderas på route "/" via App.jsx-routern.
-// Inkluderar: nav (med språkväxlare), mobilmeny (med lang), hero, statement, gallery
-// (8 bilder, lazy-load past first 3), featured (horisontell strip), about, contact
-// (Supabase-insert till gaahlin.contacts + Instagram-länk), footer, lightbox.
-// 5 språk: SV/NO/DK/FI/EN. Default svensk.
+// v0.7.0 — galleriet är nu DB-/Storage-drivet (CMS). Hämtar publika gallerier +
+// bilder från Supabase (gaahlin.galleries/images), bygger publika Storage-URL:er
+// och renderar varje galleri som ett eget block (titel + rutnät). Bilderna ligger
+// i bucket 'gaahlin-public' — inga portfoliobilder i repot längre.
+// Hero/om-mig pekar på faktiska repo-sökvägar (intro/, about/).
+// Behåller: nav + språkväxlare (SV/NO/DK/FI/EN), mobilmeny, hero, statement, about,
+// kontakt (Supabase-insert till gaahlin.contacts), footer, lightbox (över alla bilder).
 
 import { useEffect, useRef, useState } from 'react'
 import './index.css'
@@ -137,16 +137,8 @@ const langs = {
   },
 }
 
-const photos = [
-  '/images/Gallery1.jpg',
-  '/images/Gallery2.jpg',
-  '/images/Gallery3.jpg',
-  '/images/Gallery4.jpg',
-  '/images/Gallery5.jpg',
-  '/images/Gallery6.jpg',
-  '/images/Gallery7.jpg',
-  '/images/Gallery8.jpg',
-]
+const BUCKET = 'gaahlin-public'
+const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
 
 // Hjälpare: rendera text med \n som <br/>
 function renderLines(text) {
@@ -168,6 +160,8 @@ export default function PublicSite() {
   const [imgVisible, setImgVisible] = useState(false)
   const [submitNote, setSubmitNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [galleries, setGalleries] = useState([])   // [{...galleri, images:[{...bild, url, flatIndex}]}]
+  const [photos, setPhotos] = useState([])         // platt lista av bild-URL:er (för lightbox)
 
   const heroImgRef = useRef(null)
   const heroSectionRef = useRef(null)
@@ -183,11 +177,42 @@ export default function PublicSite() {
     }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
     const t1 = setTimeout(() => setLoaded(true), 100)
-    photos.slice(0, 2).forEach((src) => {
-      const img = new Image()
-      img.src = src
-    })
     return () => clearTimeout(t1)
+  }, [])
+
+  // Hämta publika gallerier + bilder (DB/Storage). RLS filtrerar redan publikt;
+  // vi filtrerar/ordnar defensivt och bygger en platt URL-lista för lightboxen.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!supabase) return
+      const { data, error } = await supabase
+        .from('galleries')
+        .select('id, slug, title, sort_order, images(storage_path, width, height, sort_order, is_public, title)')
+        .eq('is_public', true)
+        .order('sort_order')
+      if (!active) return
+      if (error || !data) { setGalleries([]); setPhotos([]); return }
+      const flat = []
+      const structured = data
+        .map((g) => {
+          const imgs = (g.images || [])
+            .filter((im) => im.is_public)
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((im) => {
+              const url = publicUrl(im.storage_path)
+              const flatIndex = flat.length
+              flat.push(url)
+              return { ...im, url, flatIndex }
+            })
+          return { ...g, images: imgs }
+        })
+        .filter((g) => g.images.length > 0)
+      setGalleries(structured)
+      setPhotos(flat)
+      flat.slice(0, 2).forEach((src) => { const im = new Image(); im.src = src })
+    })()
+    return () => { active = false }
   }, [])
 
   // Uppdatera <html lang> när språk byts
@@ -237,7 +262,7 @@ export default function PublicSite() {
     )
     document.querySelectorAll('.reveal').forEach((el) => ro.observe(el))
     return () => ro.disconnect()
-  }, [])
+  }, [galleries])
 
   // Lazy-load gallery-bilder med data-src
   useEffect(() => {
@@ -258,7 +283,7 @@ export default function PublicSite() {
     )
     document.querySelectorAll('.gallery-item[data-lazy]').forEach((el) => go.observe(el))
     return () => go.disconnect()
-  }, [])
+  }, [galleries])
 
   // Body scroll lock: mobil meny ELLER lightbox öppen
   useEffect(() => {
@@ -423,7 +448,7 @@ export default function PublicSite() {
         <img
           ref={heroImgRef}
           className="hero-img"
-          src="/images/me_bw.jpg"
+          src="/images/intro/me_bw.jpg"
           alt="Gaahlin Photography"
           fetchPriority="high"
           decoding="sync"
@@ -448,48 +473,45 @@ export default function PublicSite() {
       </section>
 
       <section id="gallery">
-        <p className="section-label reveal">{t.label_work}</p>
-        <div className="gallery-grid">
-          {photos.map((src, i) => {
-            const eager = i < 3
-            return (
-              <div
-                key={src}
-                className="gallery-item reveal"
-                {...(eager ? {} : { 'data-lazy': '1' })}
-                onClick={() => openLightbox(i)}
-              >
-                {eager ? (
-                  <img src={src} alt={`Portrait ${i + 1}`} decoding="async" />
-                ) : (
-                  <img
-                    data-src={src}
-                    src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"
-                    alt={`Portrait ${i + 1}`}
-                    decoding="async"
-                    style={{ minHeight: '200px', background: '#111' }}
-                  />
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <section id="featured">
-        <p className="section-label">{t.label_series}</p>
-        <div className="featured-strip">
-          {photos.map((src, i) => (
-            <div key={src} className="strip-item" onClick={() => openLightbox(i)}>
-              <img src={src} alt={`Series ${i + 1}`} loading="lazy" />
+        {galleries.map((g, gi) => (
+          <div
+            key={g.id}
+            className="gallery-block"
+            style={{ marginBottom: gi < galleries.length - 1 ? 'clamp(3rem, 8vw, 7rem)' : 0 }}
+          >
+            <p className="section-label reveal">{g.title}</p>
+            <div className="gallery-grid">
+              {g.images.map((img) => {
+                const eager = img.flatIndex < 3
+                return (
+                  <div
+                    key={img.flatIndex}
+                    className="gallery-item reveal"
+                    {...(eager ? {} : { 'data-lazy': '1' })}
+                    onClick={() => openLightbox(img.flatIndex)}
+                  >
+                    {eager ? (
+                      <img src={img.url} alt={img.title || g.title} decoding="async" />
+                    ) : (
+                      <img
+                        data-src={img.url}
+                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"
+                        alt={img.title || g.title}
+                        decoding="async"
+                        style={{ minHeight: '200px', background: '#111' }}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </section>
 
       <section id="about">
         <div className="about-image reveal">
-          <img src="/images/me.jpg" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async" />
+          <img src="/images/about/me.jpg" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async" />
         </div>
         <div className="about-content">
           <p className="section-label reveal">{t.label_about}</p>

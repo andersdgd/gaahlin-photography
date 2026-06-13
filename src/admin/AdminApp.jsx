@@ -1,11 +1,13 @@
 // Gaahlin Photography — admin/AdminApp.jsx
-// v0.8.0 — B06/B07: galleri-CMS mot Supabase Storage + DB.
-//   • Gallerier (gaahlin.galleries): skapa, döp om, ordna, publik/dold, radera.
-//   • Bilder per galleri (gaahlin.images): ladda upp till bucket 'gaahlin-public',
-//     ordna, publik/dold, radera. Mått (width/height) läses vid uppladdning.
-//     Radering städar även Storage-objektet → inga föräldralösa filer.
-//   v0.6.1: admin-koll utanför onAuthStateChange-låset (token-säker roles-läsning).
-//   v0.6.2: okontrollerat login-fält + ref (Safari-autofyll), knapp-feedback.
+// v0.9.0 — Arc 1: admin-finish. window.prompt/confirm ersatta av ett enhetligt mönster.
+//   • Inline-redigering (raden fälls ut till ett titelfält) för att döpa om
+//     gallerier OCH bilder — ersätter window.prompt. Bilder var tidigare oredigerbara.
+//   • Modal-bekräftelse för all radering (galleri + bild) — ersätter window.confirm.
+//     Dämpad bakgrund + röd destruktiv knapp ger det oåterkalleliga rätt vikt.
+//   Inga window.prompt/confirm kvar. Ingen migration (titel = befintlig galleries.title /
+//   images.title). Galleribeskrivning lämnad vilande — bilder visas utan text publikt.
+//   v0.8.0: galleri-CMS mot Supabase Storage + DB. v0.6.1: admin-koll utanför auth-låset.
+//   v0.6.2: Safari-autofyll-fix.
 //
 // Bilder lever i Storage, inte i repot — adminet är källan, sajten läser i runtime.
 
@@ -45,6 +47,8 @@ const ui = {
   ghost: { background: 'none', border: '1px solid #2a2a2a', color: '#aaa', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' },
   muted: { color: '#888' },
   err: { color: '#e0a0a0', fontSize: '13px' },
+  editBox: { padding: '15px', background: '#0f0f0f', border: '1px solid #242424', borderRadius: '8px', marginBottom: '8px' },
+  label: { fontSize: '11px', letterSpacing: '0.08em', color: '#777', textTransform: 'uppercase', display: 'block', margin: '0 0 6px' },
 }
 
 const SECTIONS = [
@@ -60,6 +64,71 @@ function arrowBtn(disabled) {
     color: disabled ? '#444' : '#aaa', cursor: disabled ? 'default' : 'pointer',
     width: '30px', height: '24px', fontSize: '11px', lineHeight: 1, padding: 0,
   }
+}
+
+/* ---------------- Delad bekräftelse-modal ---------------- */
+// Ersätter window.confirm. Centrerad mörk ruta, dämpad bakgrund, röd destruktiv knapp.
+// Esc eller klick utanför rutan avbryter (om inte upptaget).
+
+function ConfirmModal({ title, body, confirmLabel = 'Ta bort', onConfirm, onCancel, busy }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !busy) onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel, busy])
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.62)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: '380px', background: '#141414', border: '1px solid #2a2a2a', borderRadius: '10px', padding: '22px' }}>
+        <div style={{ ...ui.serif, fontSize: '19px', color: '#fff', margin: '0 0 10px' }}>{title}</div>
+        <p style={{ color: '#bbb', fontSize: '14px', lineHeight: 1.6, margin: '0 0 22px' }}>{body}</p>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button style={ui.ghost} onClick={onCancel} disabled={busy}>Avbryt</button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            style={{ background: '#a13535', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 16px', fontSize: '14px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? 'Tar bort…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- Inline titel-redigering ---------------- */
+// Raden fälls ut till ett titelfält + Spara/Avbryt. Samma mönster för galleri och bild.
+
+function EditRow({ value, onChange, onSave, onCancel, busy, label = 'Titel' }) {
+  return (
+    <div style={ui.editBox}>
+      <label style={ui.label}>{label}</label>
+      <input
+        autoFocus
+        style={ui.input}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel() }}
+      />
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+        <button style={ui.ghost} onClick={onCancel} disabled={busy}>Avbryt</button>
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '10px 16px', opacity: busy ? 0.6 : 1 }}
+          onClick={onSave}
+          disabled={busy}
+        >
+          Spara
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function AdminApp() {
@@ -245,6 +314,9 @@ function GalleryManager() {
   const [newTitle, setNewTitle] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState(null)   // galleri under inline-redigering
+  const [editTitle, setEditTitle] = useState('')
+  const [confirmGallery, setConfirmGallery] = useState(null) // galleri som ska raderas
 
   const load = async () => {
     const g = await supabase.from('galleries').select('*').order('sort_order')
@@ -275,16 +347,18 @@ function GalleryManager() {
     await load()
   }
 
-  const renameGallery = async (g) => {
-    const t = window.prompt('Nytt namn på galleriet:', g.title)
-    if (t === null) return
-    const trimmed = t.trim()
-    if (!trimmed) return
+  // Inline-redigering ersätter window.prompt.
+  const startEdit = (g) => { setEditingId(g.id); setEditTitle(g.title) }
+  const cancelEdit = () => { setEditingId(null); setEditTitle('') }
+  const saveEdit = async (g) => {
+    const t = editTitle.trim()
+    if (!t || busy) return
     setBusy(true); setError('')
-    const { error } = await supabase.from('galleries').update({ title: trimmed }).eq('id', g.id)
+    const { error } = await supabase.from('galleries').update({ title: t }).eq('id', g.id)
     setBusy(false)
     if (error) { setError(error.message); return }
-    await load()
+    setGalleries((gs) => gs.map((x) => (x.id === g.id ? { ...x, title: t } : x)))
+    cancelEdit()
   }
 
   const toggleGalleryPublic = async (g) => {
@@ -315,8 +389,10 @@ function GalleryManager() {
     })
   }
 
-  const deleteGallery = async (g) => {
-    if (!window.confirm(`Ta bort galleriet "${g.title}" och alla dess bilder? Detta går inte att ångra.`)) return
+  // Radering: bekräftelse via ConfirmModal ersätter window.confirm.
+  const performDeleteGallery = async () => {
+    const g = confirmGallery
+    if (!g) return
     setBusy(true); setError('')
     const imgs = await supabase.from('images').select('storage_path').eq('gallery_id', g.id)
     const keys = (imgs.data || []).map((i) => i.storage_path).filter(Boolean)
@@ -324,6 +400,7 @@ function GalleryManager() {
     const del = await supabase.from('galleries').delete().eq('id', g.id)
     setBusy(false)
     if (del.error) { setError(del.error.message); return }
+    setConfirmGallery(null)
     await load()
   }
 
@@ -364,35 +441,56 @@ function GalleryManager() {
       {galleries && galleries.length > 0 && (
         <div style={{ maxWidth: '680px' }}>
           {galleries.map((g, idx) => (
-            <div key={g.id} style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '14px 16px', marginBottom: '8px',
-              background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
-              opacity: g.is_public ? 1 : 0.55,
-            }}>
-              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpenId(g.id)}>
-                <div style={{ ...ui.serif, fontSize: '16px', color: '#fff' }}>{g.title}</div>
-                <div style={{ ...ui.muted, fontSize: '12px' }}>
-                  {(counts[g.id] || 0)} bild{(counts[g.id] || 0) === 1 ? '' : 'er'} · /{g.slug}
+            editingId === g.id ? (
+              <EditRow
+                key={g.id}
+                value={editTitle}
+                onChange={setEditTitle}
+                onSave={() => saveEdit(g)}
+                onCancel={cancelEdit}
+                busy={busy}
+              />
+            ) : (
+              <div key={g.id} style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                padding: '14px 16px', marginBottom: '8px',
+                background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
+                opacity: g.is_public ? 1 : 0.55,
+              }}>
+                <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpenId(g.id)}>
+                  <div style={{ ...ui.serif, fontSize: '16px', color: '#fff' }}>{g.title}</div>
+                  <div style={{ ...ui.muted, fontSize: '12px' }}>
+                    {(counts[g.id] || 0)} bild{(counts[g.id] || 0) === 1 ? '' : 'er'} · /{g.slug}
+                  </div>
+                </div>
+                <button style={{ ...ui.ghost, color: '#bbb' }} onClick={() => setOpenId(g.id)}>Öppna</button>
+                <button
+                  onClick={() => toggleGalleryPublic(g)}
+                  disabled={busy}
+                  style={{ ...ui.ghost, minWidth: '70px', color: g.is_public ? '#7ec699' : '#999', borderColor: g.is_public ? '#2e5a3f' : '#2a2a2a' }}
+                >
+                  {g.is_public ? 'Publik' : 'Dold'}
+                </button>
+                <button style={{ ...ui.ghost, color: '#999' }} onClick={() => startEdit(g)} disabled={busy}>Döp om</button>
+                <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => setConfirmGallery(g)} disabled={busy}>Radera</button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <button onClick={() => moveGallery(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
+                  <button onClick={() => moveGallery(idx, 1)} disabled={busy || idx === galleries.length - 1} style={arrowBtn(busy || idx === galleries.length - 1)}>▼</button>
                 </div>
               </div>
-              <button style={{ ...ui.ghost, color: '#bbb' }} onClick={() => setOpenId(g.id)}>Öppna</button>
-              <button
-                onClick={() => toggleGalleryPublic(g)}
-                disabled={busy}
-                style={{ ...ui.ghost, minWidth: '70px', color: g.is_public ? '#7ec699' : '#999', borderColor: g.is_public ? '#2e5a3f' : '#2a2a2a' }}
-              >
-                {g.is_public ? 'Publik' : 'Dold'}
-              </button>
-              <button style={{ ...ui.ghost, color: '#999' }} onClick={() => renameGallery(g)} disabled={busy}>Döp om</button>
-              <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => deleteGallery(g)} disabled={busy}>Radera</button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button onClick={() => moveGallery(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
-                <button onClick={() => moveGallery(idx, 1)} disabled={busy || idx === galleries.length - 1} style={arrowBtn(busy || idx === galleries.length - 1)}>▼</button>
-              </div>
-            </div>
+            )
           ))}
         </div>
+      )}
+
+      {confirmGallery && (
+        <ConfirmModal
+          title="Ta bort galleriet?"
+          body={`${confirmGallery.title} och alla dess ${counts[confirmGallery.id] || 0} bilder tas bort. Detta går inte att ångra.`}
+          onConfirm={performDeleteGallery}
+          onCancel={() => setConfirmGallery(null)}
+          busy={busy}
+        />
       )}
     </div>
   )
@@ -405,6 +503,9 @@ function GalleryImages({ gallery, onBack }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(0)
+  const [editingId, setEditingId] = useState(null)   // bild under inline-redigering
+  const [editTitle, setEditTitle] = useState('')
+  const [confirmImage, setConfirmImage] = useState(null) // bild som ska raderas
   const fileRef = useRef(null)
 
   const load = async () => {
@@ -471,13 +572,30 @@ function GalleryImages({ gallery, onBack }) {
     setRows((rs) => rs.map((r) => (r.id === img.id ? { ...r, is_public: !r.is_public } : r)))
   }
 
-  const remove = async (img) => {
-    if (!window.confirm('Ta bort bilden?')) return
+  // Inline-redigering av bildtitel (bilder var tidigare oredigerbara).
+  const startEdit = (img) => { setEditingId(img.id); setEditTitle(img.title || '') }
+  const cancelEdit = () => { setEditingId(null); setEditTitle('') }
+  const saveEdit = async (img) => {
+    if (busy) return
+    const t = editTitle.trim()
+    setBusy(true); setError('')
+    const { error } = await supabase.from('images').update({ title: t || null }).eq('id', img.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setRows((rs) => rs.map((r) => (r.id === img.id ? { ...r, title: t || null } : r)))
+    cancelEdit()
+  }
+
+  // Radering via ConfirmModal ersätter window.confirm.
+  const performDeleteImage = async () => {
+    const img = confirmImage
+    if (!img) return
     setBusy(true); setError('')
     if (img.storage_path) await supabase.storage.from(BUCKET).remove([img.storage_path])
     const del = await supabase.from('images').delete().eq('id', img.id)
     setBusy(false)
     if (del.error) { setError(del.error.message); return }
+    setConfirmImage(null)
     setRows((rs) => rs.filter((r) => r.id !== img.id))
   }
 
@@ -508,36 +626,59 @@ function GalleryImages({ gallery, onBack }) {
       {rows && rows.length > 0 && (
         <div style={{ maxWidth: '680px' }}>
           {rows.map((img, idx) => (
-            <div key={img.id} style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px', marginBottom: '8px',
-              background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
-              opacity: img.is_public ? 1 : 0.55,
-            }}>
-              <img
-                src={publicUrl(img.storage_path)}
-                alt={img.title || ''}
-                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '4px', background: '#000', flexShrink: 0 }}
+            editingId === img.id ? (
+              <EditRow
+                key={img.id}
+                label="Titel / bildtext"
+                value={editTitle}
+                onChange={setEditTitle}
+                onSave={() => saveEdit(img)}
+                onCancel={cancelEdit}
+                busy={busy}
               />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.title || 'Namnlös'}</div>
-                <div style={{ ...ui.muted, fontSize: '12px' }}>{img.width && img.height ? `${img.width}×${img.height}` : '—'}</div>
+            ) : (
+              <div key={img.id} style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                padding: '10px', marginBottom: '8px',
+                background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
+                opacity: img.is_public ? 1 : 0.55,
+              }}>
+                <img
+                  src={publicUrl(img.storage_path)}
+                  alt={img.title || ''}
+                  style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '4px', background: '#000', flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.title || 'Namnlös'}</div>
+                  <div style={{ ...ui.muted, fontSize: '12px' }}>{img.width && img.height ? `${img.width}×${img.height}` : '—'}</div>
+                </div>
+                <button
+                  onClick={() => togglePublic(img)}
+                  disabled={busy}
+                  style={{ ...ui.ghost, minWidth: '70px', color: img.is_public ? '#7ec699' : '#999', borderColor: img.is_public ? '#2e5a3f' : '#2a2a2a' }}
+                >
+                  {img.is_public ? 'Publik' : 'Dold'}
+                </button>
+                <button style={{ ...ui.ghost, color: '#999' }} onClick={() => startEdit(img)} disabled={busy}>Döp om</button>
+                <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => setConfirmImage(img)} disabled={busy}>Radera</button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
+                  <button onClick={() => move(idx, 1)} disabled={busy || idx === rows.length - 1} style={arrowBtn(busy || idx === rows.length - 1)}>▼</button>
+                </div>
               </div>
-              <button
-                onClick={() => togglePublic(img)}
-                disabled={busy}
-                style={{ ...ui.ghost, minWidth: '70px', color: img.is_public ? '#7ec699' : '#999', borderColor: img.is_public ? '#2e5a3f' : '#2a2a2a' }}
-              >
-                {img.is_public ? 'Publik' : 'Dold'}
-              </button>
-              <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => remove(img)} disabled={busy}>Radera</button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
-                <button onClick={() => move(idx, 1)} disabled={busy || idx === rows.length - 1} style={arrowBtn(busy || idx === rows.length - 1)}>▼</button>
-              </div>
-            </div>
+            )
           ))}
         </div>
+      )}
+
+      {confirmImage && (
+        <ConfirmModal
+          title="Ta bort bilden?"
+          body="Bilden tas bort från galleriet och Storage. Detta går inte att ångra."
+          onConfirm={performDeleteImage}
+          onCancel={() => setConfirmImage(null)}
+          busy={busy}
+        />
       )}
     </div>
   )

@@ -1,4 +1,6 @@
+FILE: src/PublicSite.jsx
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.7.1 — Arc 5: "Boka"-länk i nav + mobilmeny → /boka.
 // v0.7.0 — galleriet är nu DB-/Storage-drivet (CMS). Hämtar publika gallerier +
 // bilder från Supabase (gaahlin.galleries/images), bygger publika Storage-URL:er
 // och renderar varje galleri som ett eget block (titel + rutnät). Bilderna ligger
@@ -387,6 +389,7 @@ export default function PublicSite() {
           <li><a href="#gallery">{t.nav_work}</a></li>
           <li><a href="#about">{t.nav_about}</a></li>
           <li><a href="#contact">{t.nav_contact}</a></li>
+          <li><a href="/boka">{{ sv: 'Boka', no: 'Bestill', dk: 'Book', fi: 'Varaa', en: 'Book' }[currentLang]}</a></li>
         </ul>
         <div className="nav-right">
           <div className={`lang-switcher ${langOpen ? 'open' : ''}`} ref={langSwitcherRef}>
@@ -429,6 +432,7 @@ export default function PublicSite() {
         <a href="#gallery" className="menu-link" onClick={closeMobile}>{t.nav_work}</a>
         <a href="#about" className="menu-link" onClick={closeMobile}>{t.nav_about}</a>
         <a href="#contact" className="menu-link" onClick={closeMobile}>{t.nav_contact}</a>
+        <a href="/boka" className="menu-link" onClick={closeMobile}>{{ sv: 'Boka', no: 'Bestill', dk: 'Book', fi: 'Varaa', en: 'Book' }[currentLang]}</a>
         <div className="mobile-lang">
           {Object.keys(langs).map((code) => (
             <button

@@ -1,0 +1,7 @@
+FILE: public/robots.txt
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /kund
+
+Sitemap: https://www.gaahlin.com/sitemap.xml

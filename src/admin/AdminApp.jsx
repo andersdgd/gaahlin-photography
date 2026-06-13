@@ -1,18 +1,39 @@
 // Gaahlin Photography — admin/AdminApp.jsx
-// v0.7.0 — B06 skiva 2: Bilder & gallerier-admin (ordna + publik/dold mot gaahlin.images).
-//   v0.6.2: inloggningsfältet okontrollerat + läses via ref (Safari-autofyll
-//   uppdaterar inte React-state → knappen verkade död). Knapp-feedback + felmeddelande.
-//   v0.6.1: admin-kollen körs inte inuti onAuthStateChange-låset
-//   (gav token-lös/deadlockad roles-läsning efter magisk-länk → falsk "ej admin").
-//   1. Ingen session  → inloggning via magisk länk (Supabase Auth signInWithOtp).
-//   2. Session, ej admin → meddelande + logga ut.
-//   3. Session + admin  → skal med fyra sektioner i sidopanelen.
-// Admin-check: läser egen rad i gaahlin.roles (RLS: roles_self_select).
-// Kontakter läser gaahlin.contacts på riktigt (RLS: contacts_admin_select).
-// Bilder & gallerier är live (skiva 2); Kunder/Leveranser fortfarande platshållare.
+// v0.8.0 — B06/B07: galleri-CMS mot Supabase Storage + DB.
+//   • Gallerier (gaahlin.galleries): skapa, döp om, ordna, publik/dold, radera.
+//   • Bilder per galleri (gaahlin.images): ladda upp till bucket 'gaahlin-public',
+//     ordna, publik/dold, radera. Mått (width/height) läses vid uppladdning.
+//     Radering städar även Storage-objektet → inga föräldralösa filer.
+//   v0.6.1: admin-koll utanför onAuthStateChange-låset (token-säker roles-läsning).
+//   v0.6.2: okontrollerat login-fält + ref (Safari-autofyll), knapp-feedback.
+//
+// Bilder lever i Storage, inte i repot — adminet är källan, sajten läser i runtime.
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+
+const BUCKET = 'gaahlin-public'
+const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
+
+function slugify(s) {
+  return s
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // å/ä/ö → a/a/o
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function readDims(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url) }
+    img.onerror = () => { resolve({ w: null, h: null }); URL.revokeObjectURL(url) }
+    img.src = url
+  })
+}
 
 const ui = {
   page: { minHeight: '100vh', background: '#0a0a0a', color: '#e8e8e8', fontFamily: 'system-ui, sans-serif' },
@@ -23,6 +44,7 @@ const ui = {
   btn: { width: '100%', padding: '12px 14px', background: '#fff', color: '#000', border: 'none', borderRadius: '6px', fontSize: '15px', cursor: 'pointer' },
   ghost: { background: 'none', border: '1px solid #2a2a2a', color: '#aaa', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' },
   muted: { color: '#888' },
+  err: { color: '#e0a0a0', fontSize: '13px' },
 }
 
 const SECTIONS = [
@@ -32,20 +54,25 @@ const SECTIONS = [
   { id: 'leveranser', label: 'Leveranser' },
 ]
 
+function arrowBtn(disabled) {
+  return {
+    background: 'none', border: '1px solid #2a2a2a', borderRadius: '4px',
+    color: disabled ? '#444' : '#aaa', cursor: disabled ? 'default' : 'pointer',
+    width: '30px', height: '24px', fontSize: '11px', lineHeight: 1, padding: 0,
+  }
+}
+
 export default function AdminApp() {
   const [status, setStatus] = useState('loading') // loading | noconfig | anon | notadmin | admin
   const [session, setSession] = useState(undefined) // undefined = ej avgjort, null = utloggad, objekt = inloggad
-  const [sentTo, setSentTo] = useState('')      // e-post vi skickat länk till (tom = ej skickat)
+  const [sentTo, setSentTo] = useState('')
   const [sending, setSending] = useState(false)
   const [authErr, setAuthErr] = useState('')
+  const [section, setSection] = useState('bilder')
   const emailRef = useRef(null)
-  const [section, setSection] = useState('kontakter')
 
-  // 1) Etablera sessionen. VIKTIGT: i onAuthStateChange-callbacken gör vi BARA
-  //    setState — aldrig andra supabase-anrop. Callbacken körs i ett internt
-  //    auth-lås (navigator.locks); ett dataanrop därinne (t.ex. .from('roles'))
-  //    körs då utan token / kan deadlocka. Det var precis det som gjorde att
-  //    admin-kollen föll igenom efter magisk-länk-inloggning fast DB:n sa admin.
+  // 1) Etablera sessionen. I onAuthStateChange-callbacken gör vi BARA setState —
+  //    aldrig andra supabase-anrop (callbacken körs i ett auth-lås).
   useEffect(() => {
     if (!supabase) { setStatus('noconfig'); return }
     let active = true
@@ -54,18 +81,16 @@ export default function AdminApp() {
     return () => { active = false; sub.subscription.unsubscribe() }
   }, [])
 
-  // 2) Kör admin-kollen UTANFÖR auth-låset, när sessionen ändras. Som vanlig
-  //    React-effekt körs detta efter render, då låset redan släppts → .from()
-  //    får med din inloggade token → RLS släpper fram din rad i gaahlin.roles.
+  // 2) Admin-koll UTANFÖR auth-låset, när sessionen ändras.
   useEffect(() => {
     if (!supabase) return
-    if (session === undefined) return            // väntar fortfarande på getSession
+    if (session === undefined) return
     if (session === null) { setStatus('anon'); return }
     let active = true
     supabase.from('roles').select('role').eq('user_id', session.user.id).maybeSingle()
       .then(({ data, error }) => {
         if (!active) return
-        if (error) { console.error('[admin] roles-koll misslyckades:', error); setStatus('notadmin'); return }
+        if (error) { console.error('[admin] roles-koll:', error); setStatus('notadmin'); return }
         setStatus(data && data.role === 'admin' ? 'admin' : 'notadmin')
       })
     return () => { active = false }
@@ -73,13 +98,9 @@ export default function AdminApp() {
 
   const sendLink = async () => {
     if (sending) return
-    // Läs värdet direkt från fältet. Safari-autofyll uppdaterar inte alltid
-    // React-state, så ett kontrollerat value kan vara tomt fast fältet ser ifyllt
-    // ut — därför okontrollerat fält + ref-läsning här.
     const value = (emailRef.current?.value || '').trim()
     if (!value) { setAuthErr('Fyll i din e-post.'); emailRef.current?.focus(); return }
-    setSending(true)
-    setAuthErr('')
+    setSending(true); setAuthErr('')
     const { error } = await supabase.auth.signInWithOtp({
       email: value,
       options: { emailRedirectTo: window.location.origin + '/admin' },
@@ -126,7 +147,7 @@ export default function AdminApp() {
           >
             {sending ? 'Skickar…' : 'Skicka inloggningslänk'}
           </button>
-          {authErr && <p style={{ color: '#e0a0a0', fontSize: '13px', margin: '12px 0 0' }}>{authErr}</p>}
+          {authErr && <p style={{ ...ui.err, margin: '12px 0 0' }}>{authErr}</p>}
         </>
       )}
     </div></div></div>
@@ -170,13 +191,15 @@ export default function AdminApp() {
 
       <main style={{ flex: 1, padding: '28px 32px', minWidth: 0 }}>
         {section === 'kontakter' && <Kontakter />}
-        {section === 'bilder' && <Bilder />}
+        {section === 'bilder' && <GalleryManager />}
         {section === 'kunder' && <Placeholder title="Kunder" note="Lista, redigera och koppla leveranser sker här (klientsida). Att bjuda in nya kundkonton kräver serversidan — manuellt i dashboarden först, edge function sen." />}
         {section === 'leveranser' && <Placeholder title="Leveranser" note="Koppla bilder till kundkonton (gaahlin.deliveries) — nästa skiva." />}
       </main>
     </div>
   )
 }
+
+/* ---------------- Kontakter ---------------- */
 
 function Kontakter() {
   const [rows, setRows] = useState(null)
@@ -213,40 +236,212 @@ function Kontakter() {
   )
 }
 
-function arrowBtn(disabled) {
-  return {
-    background: 'none', border: '1px solid #2a2a2a', borderRadius: '4px',
-    color: disabled ? '#444' : '#aaa', cursor: disabled ? 'default' : 'pointer',
-    width: '28px', height: '22px', fontSize: '10px', lineHeight: 1, padding: 0,
-  }
-}
+/* ---------------- Galleri-CMS ---------------- */
 
-function Bilder() {
-  const [rows, setRows] = useState(null)
+function GalleryManager() {
+  const [galleries, setGalleries] = useState(null)   // null = laddar
+  const [counts, setCounts] = useState({})           // gallery_id -> antal bilder
+  const [openId, setOpenId] = useState(null)
+  const [newTitle, setNewTitle] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    let active = true
-    supabase.from('images').select('*').order('sort_order', { ascending: true }).then(({ data, error }) => {
-      if (!active) return
-      if (error) { setError(error.message); return }
-      setRows(data || [])
-    })
-    return () => { active = false }
-  }, [])
+  const load = async () => {
+    const g = await supabase.from('galleries').select('*').order('sort_order')
+    if (g.error) { setError(g.error.message); return }
+    setGalleries(g.data || [])
+    const c = await supabase.from('images').select('gallery_id')
+    if (!c.error) {
+      const map = {}
+      for (const row of c.data || []) map[row.gallery_id] = (map[row.gallery_id] || 0) + 1
+      setCounts(map)
+    }
+  }
+  useEffect(() => { load() }, [])
 
-  // Toggla publik/dold — sparas direkt (RLS: images_admin_all).
-  const togglePublic = async (img) => {
-    if (busy) return
+  const createGallery = async () => {
+    const t = newTitle.trim()
+    if (!t || busy) return
+    const slug = slugify(t) || ('galleri-' + Date.now())
     setBusy(true); setError('')
-    const { error } = await supabase.from('images').update({ is_public: !img.is_public }).eq('id', img.id)
+    const nextOrder = galleries && galleries.length ? Math.max(...galleries.map((g) => g.sort_order)) + 1 : 0
+    const { error } = await supabase.from('galleries').insert({ slug, title: t, sort_order: nextOrder, is_public: true })
     setBusy(false)
-    if (error) { setError(error.message); return }
-    setRows((rs) => rs.map((r) => (r.id === img.id ? { ...r, is_public: !r.is_public } : r)))
+    if (error) {
+      setError(error.code === '23505' ? 'Ett galleri med det namnet finns redan.' : error.message)
+      return
+    }
+    setNewTitle('')
+    await load()
   }
 
-  // Flytta upp/ner genom att byta sort_order med grannen (två uppdateringar).
+  const renameGallery = async (g) => {
+    const t = window.prompt('Nytt namn på galleriet:', g.title)
+    if (t === null) return
+    const trimmed = t.trim()
+    if (!trimmed) return
+    setBusy(true); setError('')
+    const { error } = await supabase.from('galleries').update({ title: trimmed }).eq('id', g.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    await load()
+  }
+
+  const toggleGalleryPublic = async (g) => {
+    setBusy(true); setError('')
+    const { error } = await supabase.from('galleries').update({ is_public: !g.is_public }).eq('id', g.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setGalleries((gs) => gs.map((x) => (x.id === g.id ? { ...x, is_public: !x.is_public } : x)))
+  }
+
+  const moveGallery = async (idx, dir) => {
+    if (busy || !galleries) return
+    const j = idx + dir
+    if (j < 0 || j >= galleries.length) return
+    const a = galleries[idx], b = galleries[j]
+    setBusy(true); setError('')
+    const r1 = await supabase.from('galleries').update({ sort_order: b.sort_order }).eq('id', a.id)
+    const r2 = await supabase.from('galleries').update({ sort_order: a.sort_order }).eq('id', b.id)
+    setBusy(false)
+    if (r1.error || r2.error) { setError((r1.error || r2.error).message); return }
+    setGalleries((gs) => {
+      const copy = gs.map((x) => {
+        if (x.id === a.id) return { ...x, sort_order: b.sort_order }
+        if (x.id === b.id) return { ...x, sort_order: a.sort_order }
+        return x
+      })
+      return copy.sort((x, y) => x.sort_order - y.sort_order)
+    })
+  }
+
+  const deleteGallery = async (g) => {
+    if (!window.confirm(`Ta bort galleriet "${g.title}" och alla dess bilder? Detta går inte att ångra.`)) return
+    setBusy(true); setError('')
+    const imgs = await supabase.from('images').select('storage_path').eq('gallery_id', g.id)
+    const keys = (imgs.data || []).map((i) => i.storage_path).filter(Boolean)
+    if (keys.length) await supabase.storage.from(BUCKET).remove(keys)
+    const del = await supabase.from('galleries').delete().eq('id', g.id)
+    setBusy(false)
+    if (del.error) { setError(del.error.message); return }
+    await load()
+  }
+
+  if (openId) {
+    const g = (galleries || []).find((x) => x.id === openId)
+    if (!g) { setOpenId(null); return null }
+    return <GalleryImages gallery={g} onBack={() => { setOpenId(null); load() }} />
+  }
+
+  return (
+    <div>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Bilder &amp; gallerier</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 24px' }}>
+        Skapa gallerier och fyll dem med bilder. Bilderna lagras i Supabase Storage — sajten läser dem direkt.
+      </p>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', maxWidth: '520px' }}>
+        <input
+          style={{ ...ui.input, marginBottom: 0, flex: 1 }}
+          placeholder="Nytt galleri — t.ex. Black Series"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && createGallery()}
+        />
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '12px 18px', whiteSpace: 'nowrap', opacity: busy ? 0.6 : 1 }}
+          onClick={createGallery}
+          disabled={busy}
+        >
+          Skapa galleri
+        </button>
+      </div>
+
+      {error && <p style={{ ...ui.err, margin: '0 0 16px' }}>{error}</p>}
+      {galleries === null && !error && <p style={ui.muted}>Laddar…</p>}
+      {galleries && galleries.length === 0 && <p style={ui.muted}>Inga gallerier än — skapa ditt första ovan.</p>}
+
+      {galleries && galleries.length > 0 && (
+        <div style={{ maxWidth: '680px' }}>
+          {galleries.map((g, idx) => (
+            <div key={g.id} style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              padding: '14px 16px', marginBottom: '8px',
+              background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
+              opacity: g.is_public ? 1 : 0.55,
+            }}>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpenId(g.id)}>
+                <div style={{ ...ui.serif, fontSize: '16px', color: '#fff' }}>{g.title}</div>
+                <div style={{ ...ui.muted, fontSize: '12px' }}>
+                  {(counts[g.id] || 0)} bild{(counts[g.id] || 0) === 1 ? '' : 'er'} · /{g.slug}
+                </div>
+              </div>
+              <button style={{ ...ui.ghost, color: '#bbb' }} onClick={() => setOpenId(g.id)}>Öppna</button>
+              <button
+                onClick={() => toggleGalleryPublic(g)}
+                disabled={busy}
+                style={{ ...ui.ghost, minWidth: '70px', color: g.is_public ? '#7ec699' : '#999', borderColor: g.is_public ? '#2e5a3f' : '#2a2a2a' }}
+              >
+                {g.is_public ? 'Publik' : 'Dold'}
+              </button>
+              <button style={{ ...ui.ghost, color: '#999' }} onClick={() => renameGallery(g)} disabled={busy}>Döp om</button>
+              <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => deleteGallery(g)} disabled={busy}>Radera</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <button onClick={() => moveGallery(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
+                <button onClick={() => moveGallery(idx, 1)} disabled={busy || idx === galleries.length - 1} style={arrowBtn(busy || idx === galleries.length - 1)}>▼</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------------- En gallerimapps bilder ---------------- */
+
+function GalleryImages({ gallery, onBack }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(0)
+  const fileRef = useRef(null)
+
+  const load = async () => {
+    const { data, error } = await supabase.from('images').select('*').eq('gallery_id', gallery.id).order('sort_order')
+    if (error) { setError(error.message); return }
+    setRows(data || [])
+  }
+  useEffect(() => { load() }, [gallery.id])
+
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    setError(''); setUploading(files.length)
+    let order = rows && rows.length ? Math.max(...rows.map((r) => r.sort_order)) : 0
+    for (const file of files) {
+      const dims = await readDims(file)
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const key = `${gallery.slug}/${crypto.randomUUID()}.${ext}`
+      const up = await supabase.storage.from(BUCKET).upload(key, file, { cacheControl: '3600', upsert: false })
+      if (up.error) { setError(up.error.message); setUploading((n) => Math.max(0, n - 1)); continue }
+      order += 1
+      const ins = await supabase.from('images').insert({
+        gallery_id: gallery.id,
+        storage_path: key,
+        sort_order: order,
+        is_public: true,
+        width: dims.w,
+        height: dims.h,
+        title: file.name.replace(/\.[^.]+$/, ''),
+      })
+      if (ins.error) setError(ins.error.message)
+      setUploading((n) => Math.max(0, n - 1))
+    }
+    await load()
+  }
+
   const move = async (idx, dir) => {
     if (busy || !rows) return
     const j = idx + dir
@@ -267,17 +462,51 @@ function Bilder() {
     })
   }
 
+  const togglePublic = async (img) => {
+    if (busy) return
+    setBusy(true); setError('')
+    const { error } = await supabase.from('images').update({ is_public: !img.is_public }).eq('id', img.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setRows((rs) => rs.map((r) => (r.id === img.id ? { ...r, is_public: !r.is_public } : r)))
+  }
+
+  const remove = async (img) => {
+    if (!window.confirm('Ta bort bilden?')) return
+    setBusy(true); setError('')
+    if (img.storage_path) await supabase.storage.from(BUCKET).remove([img.storage_path])
+    const del = await supabase.from('images').delete().eq('id', img.id)
+    setBusy(false)
+    if (del.error) { setError(del.error.message); return }
+    setRows((rs) => rs.filter((r) => r.id !== img.id))
+  }
+
   return (
     <div>
-      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Bilder &amp; gallerier</h2>
-      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 24px' }}>
-        Ordna galleribilderna och styr vilka som visas publikt. Uppladdning kommer när Storage kopplas på (B07).
+      <button style={{ ...ui.ghost, marginBottom: '18px' }} onClick={onBack}>← Alla gallerier</button>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>{gallery.title}</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 20px' }}>
+        /{gallery.slug} · {gallery.is_public ? 'publikt galleri' : 'dolt galleri'}
       </p>
-      {error && <p style={{ color: '#e0a0a0', fontSize: '13px', margin: '0 0 16px' }}>{error}</p>}
+
+      <div style={{ marginBottom: '24px' }}>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple style={{ display: 'none' }} onChange={onFiles} />
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '12px 18px', opacity: uploading ? 0.6 : 1, cursor: uploading ? 'default' : 'pointer' }}
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading > 0}
+        >
+          {uploading > 0 ? `Laddar upp… (${uploading} kvar)` : 'Ladda upp bilder'}
+        </button>
+        <span style={{ ...ui.muted, fontSize: '12px', marginLeft: '12px' }}>JPEG, PNG, WebP eller AVIF · max 20 MB</span>
+      </div>
+
+      {error && <p style={{ ...ui.err, margin: '0 0 16px' }}>{error}</p>}
       {rows === null && !error && <p style={ui.muted}>Laddar…</p>}
-      {rows && rows.length === 0 && <p style={ui.muted}>Inga bilder än.</p>}
+      {rows && rows.length === 0 && <p style={ui.muted}>Inga bilder i galleriet än — ladda upp ovan.</p>}
+
       {rows && rows.length > 0 && (
-        <div style={{ maxWidth: '620px' }}>
+        <div style={{ maxWidth: '680px' }}>
           {rows.map((img, idx) => (
             <div key={img.id} style={{
               display: 'flex', alignItems: 'center', gap: '14px',
@@ -286,26 +515,22 @@ function Bilder() {
               opacity: img.is_public ? 1 : 0.55,
             }}>
               <img
-                src={img.storage_path}
+                src={publicUrl(img.storage_path)}
                 alt={img.title || ''}
                 style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '4px', background: '#000', flexShrink: 0 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14px', color: '#eee' }}>{img.title || img.storage_path}</div>
-                <div style={{ ...ui.muted, fontSize: '12px', wordBreak: 'break-all' }}>{img.storage_path}</div>
+                <div style={{ fontSize: '14px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.title || 'Namnlös'}</div>
+                <div style={{ ...ui.muted, fontSize: '12px' }}>{img.width && img.height ? `${img.width}×${img.height}` : '—'}</div>
               </div>
               <button
                 onClick={() => togglePublic(img)}
                 disabled={busy}
-                style={{
-                  ...ui.ghost, minWidth: '78px',
-                  color: img.is_public ? '#7ec699' : '#999',
-                  borderColor: img.is_public ? '#2e5a3f' : '#2a2a2a',
-                  cursor: busy ? 'default' : 'pointer',
-                }}
+                style={{ ...ui.ghost, minWidth: '70px', color: img.is_public ? '#7ec699' : '#999', borderColor: img.is_public ? '#2e5a3f' : '#2a2a2a' }}
               >
                 {img.is_public ? 'Publik' : 'Dold'}
               </button>
+              <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => remove(img)} disabled={busy}>Radera</button>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
                 <button onClick={() => move(idx, 1)} disabled={busy || idx === rows.length - 1} style={arrowBtn(busy || idx === rows.length - 1)}>▼</button>
@@ -317,6 +542,8 @@ function Bilder() {
     </div>
   )
 }
+
+/* ---------------- Platshållare ---------------- */
 
 function Placeholder({ title, note }) {
   return (

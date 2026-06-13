@@ -1,13 +1,13 @@
 // Gaahlin Photography — admin/AdminApp.jsx
-// v0.9.0 — Arc 1: admin-finish. window.prompt/confirm ersatta av ett enhetligt mönster.
-//   • Inline-redigering (raden fälls ut till ett titelfält) för att döpa om
-//     gallerier OCH bilder — ersätter window.prompt. Bilder var tidigare oredigerbara.
-//   • Modal-bekräftelse för all radering (galleri + bild) — ersätter window.confirm.
-//     Dämpad bakgrund + röd destruktiv knapp ger det oåterkalleliga rätt vikt.
-//   Inga window.prompt/confirm kvar. Ingen migration (titel = befintlig galleries.title /
-//   images.title). Galleribeskrivning lämnad vilande — bilder visas utan text publikt.
-//   v0.8.0: galleri-CMS mot Supabase Storage + DB. v0.6.1: admin-koll utanför auth-låset.
-//   v0.6.2: Safari-autofyll-fix.
+// v0.10.0 — Arc 3 / B08 skiva 3b: Kunder + privata leveranser i adminet.
+//   • "Kunder"-sektionen: lista + bjud in kund (e-post + namn → edge function
+//     'invite-client'; service_role skapar auth-användare + clients-rad + mejl).
+//   • Klicka en kund → hantera DERAS leveransbilder: ladda upp till privata
+//     bucketen gaahlin-deliveries (nyckel <kund-uid>/<uuid>), ordna, döp om, radera.
+//     Miniatyrer via signed URLs (privat bucket). "Leveranser"-fliken borttagen —
+//     leveranser bor under respektive kund.
+//   v0.9.0: window.prompt/confirm → inline-redigering + ConfirmModal; bildtitel redigerbar.
+//   v0.8.0: galleri-CMS. v0.6.1: auth-lås-fix. v0.6.2: Safari-autofyll-fix.
 //
 // Bilder lever i Storage, inte i repot — adminet är källan, sajten läser i runtime.
 
@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const BUCKET = 'gaahlin-public'
+const DELIVERIES = 'gaahlin-deliveries'
 const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
 
 function slugify(s) {
@@ -55,7 +56,6 @@ const SECTIONS = [
   { id: 'kontakter', label: 'Kontakter' },
   { id: 'bilder', label: 'Bilder & gallerier' },
   { id: 'kunder', label: 'Kunder' },
-  { id: 'leveranser', label: 'Leveranser' },
 ]
 
 function arrowBtn(disabled) {
@@ -104,7 +104,7 @@ function ConfirmModal({ title, body, confirmLabel = 'Ta bort', onConfirm, onCanc
 }
 
 /* ---------------- Inline titel-redigering ---------------- */
-// Raden fälls ut till ett titelfält + Spara/Avbryt. Samma mönster för galleri och bild.
+// Raden fälls ut till ett titelfält + Spara/Avbryt. Samma mönster överallt.
 
 function EditRow({ value, onChange, onSave, onCancel, busy, label = 'Titel' }) {
   return (
@@ -261,8 +261,7 @@ export default function AdminApp() {
       <main style={{ flex: 1, padding: '28px 32px', minWidth: 0 }}>
         {section === 'kontakter' && <Kontakter />}
         {section === 'bilder' && <GalleryManager />}
-        {section === 'kunder' && <Placeholder title="Kunder" note="Lista, redigera och koppla leveranser sker här (klientsida). Att bjuda in nya kundkonton kräver serversidan — manuellt i dashboarden först, edge function sen." />}
-        {section === 'leveranser' && <Placeholder title="Leveranser" note="Koppla bilder till kundkonton (gaahlin.deliveries) — nästa skiva." />}
+        {section === 'kunder' && <ClientManager />}
       </main>
     </div>
   )
@@ -684,14 +683,311 @@ function GalleryImages({ gallery, onBack }) {
   )
 }
 
-/* ---------------- Platshållare ---------------- */
+/* ---------------- Kunder + privata leveranser ---------------- */
 
-function Placeholder({ title, note }) {
+function ClientManager() {
+  const [clients, setClients] = useState(null)        // null = laddar
+  const [counts, setCounts] = useState({})            // client user_id -> antal leveransbilder
+  const [openClient, setOpenClient] = useState(null)
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [confirmClient, setConfirmClient] = useState(null)
+
+  const load = async () => {
+    const c = await supabase.from('clients').select('*').order('created_at', { ascending: false })
+    if (c.error) { setError(c.error.message); return }
+    setClients(c.data || [])
+    const d = await supabase.from('deliveries').select('client_id')
+    if (!d.error) {
+      const map = {}
+      for (const row of d.data || []) map[row.client_id] = (map[row.client_id] || 0) + 1
+      setCounts(map)
+    }
+  }
+  useEffect(() => { load() }, [])
+
+  // Bjud in kund via edge function (service_role skapar auth-användare + clients-rad + mejl).
+  const addClient = async () => {
+    const e = email.trim().toLowerCase()
+    if (!e || busy) return
+    setBusy(true); setError(''); setNote('')
+    const { data, error } = await supabase.functions.invoke('invite-client', { body: { email: e, name: name.trim() } })
+    setBusy(false)
+    if (error) {
+      let msg = 'Inbjudan misslyckades.'
+      try { const b = await error.context.json(); if (b?.error) msg = b.error } catch (_) { /* behåll generiskt */ }
+      setError(msg); return
+    }
+    if (data?.error) { setError(data.error); return }
+    setEmail(''); setName('')
+    setNote(`Inbjudan skickad till ${e}. Kunden får ett mejl och syns i listan nedan.`)
+    await load()
+  }
+
+  const performDeleteClient = async () => {
+    const c = confirmClient
+    if (!c) return
+    setBusy(true); setError('')
+    // Städa leveransfiler i privata bucketen; clients-radering kaskaderar deliveries-rader.
+    const d = await supabase.from('deliveries').select('storage_path').eq('client_id', c.user_id)
+    const keys = (d.data || []).map((x) => x.storage_path).filter(Boolean)
+    if (keys.length) await supabase.storage.from(DELIVERIES).remove(keys)
+    const del = await supabase.from('clients').delete().eq('user_id', c.user_id)
+    setBusy(false)
+    if (del.error) { setError(del.error.message); return }
+    setConfirmClient(null)
+    await load()
+  }
+
+  if (openClient) {
+    return <ClientDeliveries client={openClient} onBack={() => { setOpenClient(null); load() }} />
+  }
+
   return (
     <div>
-      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>{title}</h2>
-      <p style={{ ...ui.muted, fontSize: '14px', margin: '12px 0 0', maxWidth: '440px', lineHeight: 1.6 }}>{note}</p>
-      <p style={{ color: '#555', fontSize: '12px', marginTop: '20px', letterSpacing: '0.08em' }}>KOMMER HÄRNÄST</p>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Kunder</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 24px' }}>
+        Bjud in kunder och leverera bilder privat. Varje kund loggar in med magisk länk och ser bara sina egna bilder.
+      </p>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', maxWidth: '640px', flexWrap: 'wrap' }}>
+        <input
+          style={{ ...ui.input, marginBottom: 0, flex: '2 1 220px' }}
+          type="email" inputMode="email" placeholder="Kundens e-post"
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addClient()}
+        />
+        <input
+          style={{ ...ui.input, marginBottom: 0, flex: '1 1 140px' }}
+          placeholder="Namn (valfritt)"
+          value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addClient()}
+        />
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '12px 18px', whiteSpace: 'nowrap', opacity: busy ? 0.6 : 1 }}
+          onClick={addClient} disabled={busy}
+        >
+          {busy ? 'Bjuder in…' : 'Bjud in kund'}
+        </button>
+      </div>
+      {note && <p style={{ color: '#7ec699', fontSize: '13px', margin: '0 0 16px' }}>{note}</p>}
+      {error && <p style={{ ...ui.err, margin: '8px 0 16px' }}>{error}</p>}
+      {!note && !error && <div style={{ height: '8px' }} />}
+
+      {clients === null && !error && <p style={ui.muted}>Laddar…</p>}
+      {clients && clients.length === 0 && <p style={ui.muted}>Inga kunder än — bjud in din första ovan.</p>}
+
+      {clients && clients.length > 0 && (
+        <div style={{ maxWidth: '680px' }}>
+          {clients.map((c) => (
+            <div key={c.user_id} style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              padding: '14px 16px', marginBottom: '8px',
+              background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
+            }}>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpenClient(c)}>
+                <div style={{ ...ui.serif, fontSize: '16px', color: '#fff' }}>{c.display_name || c.email}</div>
+                <div style={{ ...ui.muted, fontSize: '12px' }}>
+                  {c.display_name ? c.email + ' · ' : ''}{(counts[c.user_id] || 0)} bild{(counts[c.user_id] || 0) === 1 ? '' : 'er'}
+                </div>
+              </div>
+              <button style={{ ...ui.ghost, color: '#bbb' }} onClick={() => setOpenClient(c)}>Öppna</button>
+              <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => setConfirmClient(c)} disabled={busy}>Ta bort</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confirmClient && (
+        <ConfirmModal
+          title="Ta bort kunden?"
+          body={`${confirmClient.display_name || confirmClient.email} och alla deras ${counts[confirmClient.user_id] || 0} levererade bilder tas bort. Inloggningskontot finns kvar men förlorar åtkomst. Detta går inte att ångra.`}
+          onConfirm={performDeleteClient}
+          onCancel={() => setConfirmClient(null)}
+          busy={busy}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ---------------- En kunds leveransbilder (privat bucket) ---------------- */
+
+function ClientDeliveries({ client, onBack }) {
+  const [rows, setRows] = useState(null)
+  const [signed, setSigned] = useState({})            // storage_path -> signed url
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(0)
+  const [editingId, setEditingId] = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [confirmRow, setConfirmRow] = useState(null)
+  const fileRef = useRef(null)
+
+  const load = async () => {
+    const { data, error } = await supabase.from('deliveries').select('*').eq('client_id', client.user_id).order('sort_order')
+    if (error) { setError(error.message); return }
+    setRows(data || [])
+    // Privat bucket → ingen publik URL. Admin har åtkomst, så vi signerar miniatyrerna.
+    const keys = (data || []).map((r) => r.storage_path).filter(Boolean)
+    if (keys.length) {
+      const { data: urls } = await supabase.storage.from(DELIVERIES).createSignedUrls(keys, 3600)
+      const map = {}
+      for (const u of urls || []) if (u.signedUrl) map[u.path] = u.signedUrl
+      setSigned(map)
+    } else setSigned({})
+  }
+  useEffect(() => { load() }, [client.user_id])
+
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    setError(''); setUploading(files.length)
+    let order = rows && rows.length ? Math.max(...rows.map((r) => r.sort_order)) : 0
+    for (const file of files) {
+      const dims = await readDims(file)
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      // Nyckel = <kund-uid>/<uuid> → storage-policyn låter just den kunden läsa.
+      const key = `${client.user_id}/${crypto.randomUUID()}.${ext}`
+      const up = await supabase.storage.from(DELIVERIES).upload(key, file, { cacheControl: '3600', upsert: false })
+      if (up.error) { setError(up.error.message); setUploading((n) => Math.max(0, n - 1)); continue }
+      order += 1
+      const ins = await supabase.from('deliveries').insert({
+        client_id: client.user_id,
+        storage_path: key,
+        sort_order: order,
+        width: dims.w,
+        height: dims.h,
+        title: file.name.replace(/\.[^.]+$/, ''),
+      })
+      if (ins.error) setError(ins.error.message)
+      setUploading((n) => Math.max(0, n - 1))
+    }
+    await load()
+  }
+
+  const move = async (idx, dir) => {
+    if (busy || !rows) return
+    const j = idx + dir
+    if (j < 0 || j >= rows.length) return
+    const a = rows[idx], b = rows[j]
+    setBusy(true); setError('')
+    const r1 = await supabase.from('deliveries').update({ sort_order: b.sort_order }).eq('id', a.id)
+    const r2 = await supabase.from('deliveries').update({ sort_order: a.sort_order }).eq('id', b.id)
+    setBusy(false)
+    if (r1.error || r2.error) { setError((r1.error || r2.error).message); return }
+    setRows((rs) => {
+      const copy = rs.map((r) => {
+        if (r.id === a.id) return { ...r, sort_order: b.sort_order }
+        if (r.id === b.id) return { ...r, sort_order: a.sort_order }
+        return r
+      })
+      return copy.sort((x, y) => x.sort_order - y.sort_order)
+    })
+  }
+
+  const startEdit = (row) => { setEditingId(row.id); setEditTitle(row.title || '') }
+  const cancelEdit = () => { setEditingId(null); setEditTitle('') }
+  const saveEdit = async (row) => {
+    if (busy) return
+    const t = editTitle.trim()
+    setBusy(true); setError('')
+    const { error } = await supabase.from('deliveries').update({ title: t || null }).eq('id', row.id)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, title: t || null } : r)))
+    cancelEdit()
+  }
+
+  const performDelete = async () => {
+    const row = confirmRow
+    if (!row) return
+    setBusy(true); setError('')
+    if (row.storage_path) await supabase.storage.from(DELIVERIES).remove([row.storage_path])
+    const del = await supabase.from('deliveries').delete().eq('id', row.id)
+    setBusy(false)
+    if (del.error) { setError(del.error.message); return }
+    setConfirmRow(null)
+    setRows((rs) => rs.filter((r) => r.id !== row.id))
+  }
+
+  return (
+    <div>
+      <button style={{ ...ui.ghost, marginBottom: '18px' }} onClick={onBack}>← Alla kunder</button>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>{client.display_name || client.email}</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 20px' }}>
+        {client.email} · privata leveranser (bara kunden ser dem)
+      </p>
+
+      <div style={{ marginBottom: '24px' }}>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple style={{ display: 'none' }} onChange={onFiles} />
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '12px 18px', opacity: uploading ? 0.6 : 1, cursor: uploading ? 'default' : 'pointer' }}
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading > 0}
+        >
+          {uploading > 0 ? `Laddar upp… (${uploading} kvar)` : 'Ladda upp bilder'}
+        </button>
+        <span style={{ ...ui.muted, fontSize: '12px', marginLeft: '12px' }}>JPEG, PNG, WebP eller AVIF · max 50 MB</span>
+      </div>
+
+      {error && <p style={{ ...ui.err, margin: '0 0 16px' }}>{error}</p>}
+      {rows === null && !error && <p style={ui.muted}>Laddar…</p>}
+      {rows && rows.length === 0 && <p style={ui.muted}>Inga bilder levererade än — ladda upp ovan.</p>}
+
+      {rows && rows.length > 0 && (
+        <div style={{ maxWidth: '680px' }}>
+          {rows.map((row, idx) => (
+            editingId === row.id ? (
+              <EditRow
+                key={row.id}
+                label="Titel / bildtext"
+                value={editTitle}
+                onChange={setEditTitle}
+                onSave={() => saveEdit(row)}
+                onCancel={cancelEdit}
+                busy={busy}
+              />
+            ) : (
+              <div key={row.id} style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                padding: '10px', marginBottom: '8px',
+                background: '#111', border: '1px solid #1c1c1c', borderRadius: '8px',
+              }}>
+                <img
+                  src={signed[row.storage_path] || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"}
+                  alt={row.title || ''}
+                  style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '4px', background: '#000', flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.title || 'Namnlös'}</div>
+                  <div style={{ ...ui.muted, fontSize: '12px' }}>{row.width && row.height ? `${row.width}×${row.height}` : '—'}</div>
+                </div>
+                <button style={{ ...ui.ghost, color: '#999' }} onClick={() => startEdit(row)} disabled={busy}>Döp om</button>
+                <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => setConfirmRow(row)} disabled={busy}>Radera</button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} style={arrowBtn(busy || idx === 0)}>▲</button>
+                  <button onClick={() => move(idx, 1)} disabled={busy || idx === rows.length - 1} style={arrowBtn(busy || idx === rows.length - 1)}>▼</button>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      )}
+
+      {confirmRow && (
+        <ConfirmModal
+          title="Ta bort bilden?"
+          body="Bilden tas bort från leveransen och Storage. Detta går inte att ångra."
+          onConfirm={performDelete}
+          onCancel={() => setConfirmRow(null)}
+          busy={busy}
+        />
+      )}
     </div>
   )
 }

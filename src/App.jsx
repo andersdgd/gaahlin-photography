@@ -1,13 +1,15 @@
 // Gaahlin Photography — App.jsx (router)
-// v0.6.0 — B06 skiva 1: appen blir router. Den publika sajten ligger nu i
-// PublicSite.jsx (oförändrad), admin i admin/AdminApp.jsx.
-//   "/"        → publik portfolio
-//   "/admin/*" → admin (magisk länk-inloggning + is_admin-gate + skal)
+// v0.7.0 — Arc 3 / B08 skiva 3c: kundvy på /kund.
+//   "/"        → publik portfolio (PublicSite)
+//   "/admin/*" → admin (magisk länk + is_admin-gate + skal)
+//   "/kund/*"  → kundvy (magisk länk + kund-rad-gate, egna leveranser)
+//   v0.6.0: appen blev router.
 // BrowserRouter kräver SPA-fallback i Vercel — se vercel.json.
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PublicSite from './PublicSite'
 import AdminApp from './admin/AdminApp'
+import ClientApp from './client/ClientApp'
 
 export default function App() {
   return (
@@ -15,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PublicSite />} />
         <Route path="/admin/*" element={<AdminApp />} />
+        <Route path="/kund/*" element={<ClientApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

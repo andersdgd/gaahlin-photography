@@ -1,4 +1,11 @@
 // Gaahlin Photography — client/ClientApp.jsx
+// v0.2.0 — Arc 6: kund-inlogg-härdning.
+//   • shouldCreateUser: false på OTP-anropet — /kund skapar aldrig nya auth-användare;
+//     bara adresser som redan bjudits in via adminet (edge fn invite-client) får länk.
+//   • Utgången/ogiltig länk (Supabase lägger ?error=/#error= i URL:en) fångas upp och
+//     förklaras; kunden erbjuds att begära en ny länk direkt.
+//   • Svenska, handlingsbara fel: "Signups not allowed" → adressen saknar konto;
+//     rate limit (429) → vänta och försök igen. "Skicka igen"/"annan e-post" efter utskick.
 // v0.1.0 — Arc 3 / B08 skiva 3c: kundens egen vy på /kund.
 //   Magisk länk-inloggning → gate (inloggad OCH har en kund-rad i gaahlin.clients)
 //   → visar kundens egna leveranser i rutnät, med lightbox + nedladdning.
@@ -14,6 +21,47 @@ import { supabase } from '../lib/supabase'
 
 const DELIVERIES = 'gaahlin-deliveries'
 
+// === Arc 6: utgången/ogiltig länk ===
+// Supabase skickar tillbaka fel som query- eller hash-parametrar, t.ex.
+// #error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired
+function readLinkError() {
+  const parse = (str) => new URLSearchParams(str.replace(/^[#?]/, ''))
+  const h = parse(window.location.hash)
+  const q = parse(window.location.search)
+  const code = h.get('error_code') || q.get('error_code')
+  const err = h.get('error') || q.get('error')
+  if (!code && !err) return null
+  return code || err
+}
+
+function clearLinkError() {
+  try { window.history.replaceState(null, '', window.location.pathname) } catch { /* ignorera */ }
+}
+
+function linkErrorText(code) {
+  switch (code) {
+    case 'otp_expired':
+      return 'Inloggningslänken har gått ut. Länkar är giltiga en begränsad tid och kan bara användas en gång.'
+    case 'access_denied':
+      return 'Inloggningslänken är ogiltig eller redan använd.'
+    default:
+      return 'Inloggningslänken gick inte att använda.'
+  }
+}
+
+// Översätt Supabase-auth-fel till begripliga, handlingsbara meddelanden.
+function authErrorText(error) {
+  const msg = (error?.message || '').toLowerCase()
+  const status = error?.status
+  if (status === 429 || msg.includes('rate limit') || msg.includes('too many'))
+    return 'För många försök just nu. Vänta en stund och försök igen.'
+  if (msg.includes('signups not allowed') || msg.includes('signup'))
+    return 'Den här e-postadressen har inget kundkonto hos oss. Kontrollera adressen — eller hör av dig om du väntar på bilder.'
+  if (msg.includes('invalid') && msg.includes('email'))
+    return 'Det ser inte ut som en giltig e-postadress.'
+  return error?.message || 'Något gick fel. Försök igen.'
+}
+
 const ui = {
   page: { minHeight: '100vh', background: '#0a0a0a', color: '#e8e8e8', fontFamily: 'system-ui, sans-serif' },
   center: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' },
@@ -24,6 +72,8 @@ const ui = {
   ghost: { background: 'none', border: '1px solid #2a2a2a', color: '#aaa', padding: '8px 14px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' },
   muted: { color: '#888' },
   err: { color: '#e0a0a0', fontSize: '13px' },
+  notice: { color: '#d8d8d8', fontSize: '14px', lineHeight: 1.6, textAlign: 'left', padding: '12px 14px', border: '1px solid #2a2a2a', borderRadius: '6px', background: '#121212' },
+  link: { background: 'none', border: 'none', padding: 0, color: '#ccc', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' },
 }
 
 export default function ClientApp() {
@@ -33,12 +83,16 @@ export default function ClientApp() {
   const [sentTo, setSentTo] = useState('')
   const [sending, setSending] = useState(false)
   const [authErr, setAuthErr] = useState('')
+  const [linkErr, setLinkErr] = useState(() => readLinkError())  // fel från utgången/ogiltig länk i URL:en
   const emailRef = useRef(null)
 
   const [rows, setRows] = useState(null)
   const [signed, setSigned] = useState({})
   const [delivErr, setDelivErr] = useState('')
   const [lightbox, setLightbox] = useState(null)   // index eller null
+
+  // 0) Städa bort felparametrar ur URL:en (de är redan lästa in i state).
+  useEffect(() => { if (linkErr) clearLinkError() }, [linkErr])
 
   // 1) Etablera sessionen (callbacken gör bara setState).
   useEffect(() => {
@@ -107,12 +161,19 @@ export default function ClientApp() {
     setSending(true); setAuthErr('')
     const { error } = await supabase.auth.signInWithOtp({
       email: value,
-      options: { emailRedirectTo: window.location.origin + '/kund' },
+      options: {
+        emailRedirectTo: window.location.origin + '/kund',
+        shouldCreateUser: false,   // Arc 6: /kund skapar aldrig konton — bara inbjudna kunder
+      },
     })
     setSending(false)
-    if (error) { setAuthErr(error.message); return }
+    if (error) { setAuthErr(authErrorText(error)); return }
+    setLinkErr(null)
     setSentTo(value)
   }
+
+  // "Skicka igen" / "annan e-post": tillbaka till formuläret med adressen förifylld.
+  const resetSend = () => { setSentTo(''); setAuthErr('') }
 
   const logout = () => supabase.auth.signOut()
 
@@ -148,11 +209,24 @@ export default function ClientApp() {
       <h1 style={{ ...ui.serif, fontSize: '30px', margin: '0 0 6px' }}>Gaahlin</h1>
       <p style={{ ...ui.muted, margin: '0 0 28px', letterSpacing: '0.12em', fontSize: '12px' }}>DINA BILDER</p>
       {sentTo ? (
-        <p style={ui.muted}>Kolla din mejl — en inloggningslänk är skickad till {sentTo}.</p>
+        <>
+          <p style={{ ...ui.muted, fontSize: '14px', lineHeight: 1.6, margin: '0 0 20px' }}>
+            Kolla din mejl — en inloggningslänk är skickad till {sentTo}. Länken fungerar en gång och en begränsad tid.
+          </p>
+          <p style={{ ...ui.muted, fontSize: '13px', margin: 0 }}>
+            Inget mejl? Titta i skräpposten, eller{' '}
+            <button style={ui.link} onClick={resetSend}>skicka igen</button>.
+          </p>
+        </>
       ) : (
         <>
+          {linkErr && (
+            <p style={{ ...ui.notice, margin: '0 0 20px' }}>
+              {linkErrorText(linkErr)} Ange din e-post nedan så skickar vi en ny.
+            </p>
+          )}
           <p style={{ ...ui.muted, fontSize: '14px', margin: '0 0 20px', lineHeight: 1.6 }}>
-            Ange din e-post så skickar vi en inloggningslänk.
+            {linkErr ? 'Begär en ny inloggningslänk.' : 'Ange din e-post så skickar vi en inloggningslänk.'}
           </p>
           <input
             ref={emailRef}
@@ -161,7 +235,7 @@ export default function ClientApp() {
             inputMode="email"
             autoComplete="email"
             placeholder="din e-post"
-            defaultValue=""
+            defaultValue={sentTo}
             onKeyDown={(e) => e.key === 'Enter' && sendLink()}
           />
           <button
@@ -169,7 +243,7 @@ export default function ClientApp() {
             onClick={sendLink}
             disabled={sending}
           >
-            {sending ? 'Skickar…' : 'Skicka inloggningslänk'}
+            {sending ? 'Skickar…' : (linkErr ? 'Skicka ny inloggningslänk' : 'Skicka inloggningslänk')}
           </button>
           {authErr && <p style={{ ...ui.err, margin: '12px 0 0' }}>{authErr}</p>}
         </>

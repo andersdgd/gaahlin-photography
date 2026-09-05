@@ -1,4 +1,5 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.11.1 — admin-nav ommöblerad: Bilder & gallerier överst, sedan Kontakter, Bokningar, Kunder.
 // v0.11.0 — Arc 5: Bokningar-sektion (gaahlin.bookings) — inkomna förfrågningar
 //   från sidan /boka, med statushantering (ny/bekräftad/genomförd/avböjd) + radera.
 // v0.10.0 — Arc 3 / B08 skiva 3b: Kunder + privata leveranser i adminet.
@@ -55,9 +56,9 @@ const ui = {
 }
 
 const SECTIONS = [
+  { id: 'bilder', label: 'Bilder & gallerier' },
   { id: 'kontakter', label: 'Kontakter' },
   { id: 'bokningar', label: 'Bokningar' },
-  { id: 'bilder', label: 'Bilder & gallerier' },
   { id: 'kunder', label: 'Kunder' },
 ]
 

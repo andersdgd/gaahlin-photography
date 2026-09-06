@@ -25,6 +25,12 @@
   <meta name="twitter:description" content="Porträtt, editorial och personliga projekt. Fotograf baserad i Stockholm." />
   <meta name="twitter:image" content="https://www.gaahlin.com/images/intro/me_bw.jpg" />
 
+  <!-- Hero-bilden hämtas innan React monterar, så inglidningen kan börja direkt.
+       OBS: pekar på repo-filen = standardheron. Sätts en egen hero-bild i adminet
+       (Innehåll → Hero → Hero-bild) laddas den ur Storage i stället, och den här raden
+       ska då peka på den URL:en eller tas bort — annars hämtas en fil som inte visas. -->
+  <link rel="preload" as="image" href="/images/intro/me_bw.jpg" fetchpriority="high" />
+
   <style>html,body{margin:0;background:#000}</style>
 </head>
 <body>

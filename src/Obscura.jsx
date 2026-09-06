@@ -1,4 +1,10 @@
 // Gaahlin Photography — Obscura.jsx (visningsrummet, prototyp)
+// v0.2.0 — "Levande": scenen är nu mörkrummet (WebGL, src/lib/darkroom.js). Varje bild är en print som
+//   framkallas i tråget när den blir aktiv (tätaste toner först, ojämn kemi, korn), och besökaren håller
+//   lampan: markören/lutningen flyttar en ljuspöl med baryta-sheen över printen; vid stillhet andas lampan
+//   själv. Ljud (av som standard): en dov klang per bild ur dess tonalitet. Närvaro: "N i rummet" via
+//   Supabase Realtime. ?native=1 → v0.1-scenen med nativ <img> (HDR-testet). Fallback till nativ vid
+//   saknad WebGL eller CORS-tainted bild. Länk till /spegeln.
 // v0.1.2 — Buggfix: onLoad läste ev.currentTarget inuti setDims-uppdateraren (körs senare, React har
 //   nollat currentTarget) → "null is not an object (evaluating currentTarget.naturalWidth)" så fort
 //   första bilden laddat. Nu läses måtten synkront i handlern. Repro med riktiga bilder över HTTP.
@@ -23,6 +29,7 @@
 
 import { Component, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
+import { createDarkroom, containRect } from './lib/darkroom'
 
 const BUCKET = 'gaahlin-public'
 const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
@@ -300,6 +307,49 @@ class Boundary extends Component {
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 const fade = (x) => clamp(1 - (Math.abs(x) - 0.2) / 0.6, 0, 1)   // platå ±0.2, dissolve till ±0.8
 const q = (s) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(s).matches : false)
+const param = (k) => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get(k) : null)
+
+// Tonalitet ur en laddad bild (48×48): medelluminans + spridning → styr ljudet
+function tonality(img) {
+  try {
+    const c = document.createElement('canvas'); c.width = 48; c.height = 48
+    const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0, 48, 48)
+    const d = ctx.getImageData(0, 0, 48, 48).data
+    let sum = 0, sum2 = 0, n = 0
+    for (let i = 0; i < d.length; i += 4) { const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255; sum += L; sum2 += L * L; n++ }
+    const mean = sum / n; const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean))
+    return { mean, sd }
+  } catch (e) { return { mean: 0.4, sd: 0.25 } }
+}
+
+// Ljudet: en dov klang som följer bildens tonalitet. Skapas först vid användargest.
+function createSound() {
+  const AC = window.AudioContext || window.webkitAudioContext
+  if (!AC) return null
+  const ac = new AC()
+  const master = ac.createGain(); master.gain.value = 0; master.connect(ac.destination)
+  const filter = ac.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 600; filter.Q.value = 0.7; filter.connect(master)
+  const mk = (type, f, g) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; const gn = ac.createGain(); gn.gain.value = g; o.connect(gn); gn.connect(filter); o.start(); return o }
+  const o1 = mk('sine', 82, 0.5), o2 = mk('triangle', 123.3, 0.12), o3 = mk('sine', 41, 0.3)
+  // brus (brunt) som ett svagt rum
+  const len = ac.sampleRate * 2; const buf = ac.createBuffer(1, len, ac.sampleRate); const ch = buf.getChannelData(0)
+  let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; ch[i] = last * 3.5 }
+  const noise = ac.createBufferSource(); noise.buffer = buf; noise.loop = true
+  const ng = ac.createGain(); ng.gain.value = 0.05; noise.connect(ng); ng.connect(filter); noise.start()
+  const lfo = ac.createOscillator(); lfo.frequency.value = 0.05; const lg = ac.createGain(); lg.gain.value = 120; lfo.connect(lg); lg.connect(filter.frequency); lfo.start()
+  return {
+    ac,
+    on() { ac.resume(); master.gain.setTargetAtTime(0.16, ac.currentTime, 1.2) },
+    off() { master.gain.setTargetAtTime(0, ac.currentTime, 0.6) },
+    tone({ mean, sd }, title) {
+      const t = ac.currentTime
+      const f = title ? 55 : 48 + mean * 90
+      o1.frequency.setTargetAtTime(f, t, 1.4); o2.frequency.setTargetAtTime(f * 1.498, t, 1.4); o3.frequency.setTargetAtTime(f / 2, t, 1.4)
+      filter.frequency.setTargetAtTime(title ? 260 : 260 + sd * 2600, t, 1.2)
+    },
+    dispose() { try { ac.close() } catch (e) { /* tyst */ } },
+  }
+}
 
 function Mark({ state }) {
   // Ring = inga credentials · ring med punkt = manifest läst · fylld = signatur verifierad · streckad = fel
@@ -315,7 +365,9 @@ function Mark({ state }) {
 const css = `
 .ob-root{position:fixed;inset:0;background:#000;color:#fff;overflow:hidden;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .ob-stage{position:absolute;inset:0;z-index:1}
+.ob-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .ob-img{position:absolute;top:50%;left:50%;max-width:92vw;max-height:88%;width:auto;height:auto;object-fit:contain;transform:translate(-50%,-50%);opacity:0;will-change:opacity,transform;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+.ob-loader{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .ob-title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;opacity:0;will-change:opacity;padding:0 1.5rem}
 .ob-title h1,.ob-title h2{font-family:'Cormorant Garamond',serif;font-weight:300;letter-spacing:.18em;text-transform:uppercase;line-height:1.1;margin:0;color:rgba(255,255,255,.82)}
 .ob-title h1{font-size:clamp(2.2rem,6vw,5rem)}
@@ -329,9 +381,10 @@ const css = `
 .ob-corner{position:absolute;font-size:8px;letter-spacing:.4em;text-transform:uppercase;color:rgba(255,255,255,.35);line-height:2}
 .ob-tl{top:calc(1.4rem + env(safe-area-inset-top));left:calc(1.6rem + env(safe-area-inset-left))}
 .ob-tl .ob-logo{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:.25em;color:#fff;text-decoration:none;display:block}
-.ob-tr{top:calc(1.4rem + env(safe-area-inset-top));right:calc(1.6rem + env(safe-area-inset-right))}
-.ob-tr a{color:rgba(255,255,255,.35);text-decoration:none;transition:color .3s}
-.ob-tr a:hover,.ob-tr a:focus-visible{color:#fff;outline:none}
+.ob-tr{top:calc(1.4rem + env(safe-area-inset-top));right:calc(1.6rem + env(safe-area-inset-right));text-align:right}
+.ob-tr a,.ob-tr button{color:rgba(255,255,255,.35);text-decoration:none;transition:color .3s;background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;display:block;margin-left:auto}
+.ob-tr a:hover,.ob-tr a:focus-visible,.ob-tr button:hover,.ob-tr button:focus-visible{color:#fff;outline:none}
+.ob-tr button[aria-pressed="true"]{color:#fff}
 .ob-bl{bottom:calc(1.4rem + env(safe-area-inset-bottom));left:calc(1.6rem + env(safe-area-inset-left));max-width:min(420px,calc(100vw - 3.2rem))}
 .ob-br{bottom:calc(1.4rem + env(safe-area-inset-bottom));right:calc(1.6rem + env(safe-area-inset-right));text-align:right;color:rgba(255,255,255,.22)}
 .ob-chapter{color:rgba(255,255,255,.45);white-space:nowrap}
@@ -339,7 +392,7 @@ const css = `
 .ob-cred:hover,.ob-cred:focus-visible{color:#fff;outline:none}
 .ob-cred[aria-expanded="true"]{color:#fff}
 .ob-mark{width:12px;height:12px;flex:none}
-.ob-panel{margin:0 0 .9rem;padding:1rem 0 .4rem;border-top:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:auto 1fr;column-gap:1.4rem;row-gap:.45rem;font-size:11px;letter-spacing:.04em;line-height:1.55;color:rgba(255,255,255,.72);text-transform:none;pointer-events:auto}
+.ob-panel{margin:0 0 .9rem;padding:1rem 0 .4rem;border-top:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:auto 1fr;column-gap:1.4rem;row-gap:.45rem;font-size:11px;letter-spacing:.04em;line-height:1.55;color:rgba(255,255,255,.72);text-transform:none;pointer-events:auto;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding-right:.8rem}
 .ob-panel dt{font-size:8px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.3);padding-top:.25em;white-space:nowrap}
 .ob-panel dd{margin:0;overflow-wrap:anywhere}
 .ob-panel .ob-dim{color:rgba(255,255,255,.4)}
@@ -351,7 +404,8 @@ const css = `
 .ob-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;font-size:11px;letter-spacing:.1em;line-height:2;color:rgba(255,255,255,.5);z-index:4}
 .ob-note a{color:#fff}
 .ob-debug{position:absolute;left:50%;top:calc(1.2rem + env(safe-area-inset-top));transform:translateX(-50%);z-index:5;font-family:Menlo,monospace;font-size:13px;line-height:1.5;color:#0f0;background:rgba(0,0,0,.7);padding:.6rem .9rem;white-space:pre-wrap;max-width:90vw;pointer-events:none}
-@media (max-width:600px){.ob-br{display:none}.ob-bl{max-width:calc(100vw - 3.2rem)}.ob-dots{display:none}.ob-img{max-width:94vw;max-height:80%}}
+.ob-hint{position:absolute;left:50%;bottom:calc(3.2rem + env(safe-area-inset-bottom));transform:translateX(-50%);font-size:8px;letter-spacing:.5em;text-transform:uppercase;color:rgba(255,255,255,.28);white-space:nowrap;transition:opacity 1.2s}
+@media (max-width:600px){.ob-br{display:none}.ob-bl{max-width:calc(100vw - 3.2rem)}.ob-dots{display:none}.ob-img{max-width:94vw;max-height:80%}.ob-hint{bottom:calc(5rem + env(safe-area-inset-bottom))}}
 @media (prefers-reduced-motion:reduce){.ob-img{transition:none}}
 `
 
@@ -362,6 +416,9 @@ export default function Obscura() {
   return <Boundary><Room /></Boundary>
 }
 
+const DEV_MS = 2800      // framkallningstid per print
+const PAPER_MS = 320     // pappret in i tråget
+
 function Room() {
   const [frames, setFrames] = useState(null)      // [{type:'title'|'image', ...}]
   const [note, setNote] = useState('')
@@ -370,12 +427,25 @@ function Room() {
   const [dims, setDims] = useState({})            // index → {w,h} ur den laddade bilden
   const [meta, setMeta] = useState({})            // index → {state, cred, hdr, exif, verify}
   const [panelOpen, setPanelOpen] = useState(false)
-  const [dbg, setDbg] = useState(null)         // ?debug=1 → mätremsa
-  const debug = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1')
+  const [soundOn, setSoundOn] = useState(false)
+  const [present, setPresent] = useState(0)
+  const [dbg, setDbg] = useState(null)
+  const [nativeMode, setNativeMode] = useState(() => param('native') === '1')
+  const debug = useRef(param('debug') === '1')
   const scrollerRef = useRef(null)
-  const elRefs = useRef([])
+  const canvasRef = useRef(null)
+  const elRefs = useRef([])          // titlar (DOM) + nativa <img>
+  const imgRefs = useRef([])         // laddar-<img> (texturkälla)
   const reduced = useRef(false)
   const env = useRef({ hdr: false, p3: false, webgpu: false, sda: false })
+  const dr = useRef(null)            // darkroom
+  const texs = useRef({})            // index → textur
+  const tone = useRef({})            // index → {mean, sd}
+  const devSince = useRef({})        // index → tidsstämpel när printen lades i tråget
+  const lamp = useRef({ x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, lastMove: 0 })
+  const progressRef = useRef(0)
+  const sound = useRef(null)
+  const activeRef = useRef(0)
 
   // Miljö + titel
   useEffect(() => {
@@ -396,7 +466,7 @@ function Room() {
     let alive = true
     ;(async () => {
       if (!supabase) { setNote('Supabase är inte konfigurerad.'); return }
-      const g = new URLSearchParams(window.location.search).get('g')
+      const g = param('g')
       let query = supabase
         .from('galleries')
         .select('id, slug, title, sort_order, images(storage_path, width, height, sort_order, is_public, title)')
@@ -430,39 +500,115 @@ function Room() {
     return () => { alive = false }
   }, [])
 
-  // Scroll-scrub: ram i får opacitet ur avståndet till scrollpositionen. Ingen React-rendering per scroll.
+  // Mörkrummet: en WebGL-kontext för hela scenen. Saknas WebGL → nativt läge.
+  useEffect(() => {
+    if (nativeMode || !canvasRef.current) return
+    try {
+      const d = createDarkroom(canvasRef.current)
+      if (!d) { setNativeMode(true); return }
+      dr.current = d
+    } catch (e) { caught.push('darkroom: ' + (e.message || e)); setNativeMode(true); return }
+    const size = () => {
+      const W = window.innerWidth, H = window.innerHeight
+      const ratio = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(8e6 / Math.max(1, W * H)))
+      dr.current.resize(W, H, ratio)
+    }
+    size()
+    window.addEventListener('resize', size)
+    return () => { window.removeEventListener('resize', size); dr.current?.dispose(); dr.current = null }
+  }, [nativeMode])
+
+  // Lampan: markör, touch, lutning. Vid stillhet andas den själv (i tick).
+  useEffect(() => {
+    const move = (x, y) => { const l = lamp.current; l.tx = clamp(x / window.innerWidth, 0, 1); l.ty = clamp(y / window.innerHeight, 0, 1); l.lastMove = performance.now() }
+    const onPointer = (e) => move(e.clientX, e.clientY)
+    const onTouch = (e) => { if (e.touches[0]) move(e.touches[0].clientX, e.touches[0].clientY) }
+    const onTilt = (e) => { if (e.gamma == null || e.beta == null) return; move(window.innerWidth * (0.5 + clamp(e.gamma / 40, -1, 1) * 0.4), window.innerHeight * (0.5 + clamp((e.beta - 40) / 40, -1, 1) * 0.3)) }
+    const askTilt = () => { const D = window.DeviceOrientationEvent; if (D && typeof D.requestPermission === 'function') D.requestPermission().catch(() => {}); window.removeEventListener('touchstart', askTilt) }
+    window.addEventListener('pointermove', onPointer, { passive: true })
+    window.addEventListener('touchmove', onTouch, { passive: true })
+    window.addEventListener('touchstart', askTilt, { passive: true })
+    window.addEventListener('deviceorientation', onTilt)
+    return () => { window.removeEventListener('pointermove', onPointer); window.removeEventListener('touchmove', onTouch); window.removeEventListener('touchstart', askTilt); window.removeEventListener('deviceorientation', onTilt) }
+  }, [])
+
+  // Scroll → progress + aktiv ram (ingen React-rendering per scroll; titlar sätts i tick)
   useEffect(() => {
     const sc = scrollerRef.current
     if (!sc || !frames) return
-    let raf = 0
-    let last = -1
     if (sc.scrollTop) sc.scrollTop = 0
-    const paint = () => {
-      raf = 0
+    let last = -1
+    const read = () => {
       const vh = sc.clientHeight || 1
-      const progress = sc.scrollTop / vh
-      if (!Number.isFinite(progress)) return
-      if (debug.current) setDbg({ vh, scrollTop: sc.scrollTop, progress: progress.toFixed(3) })
+      const p = sc.scrollTop / vh
+      if (!Number.isFinite(p)) return
+      progressRef.current = p
+      const a = clamp(Math.round(p), 0, frames.length - 1)
+      if (a !== last) { last = a; activeRef.current = a; setActive(a) }
+      if (debug.current) setDbg({ vh, scrollTop: sc.scrollTop, progress: p.toFixed(3) })
+    }
+    sc.addEventListener('scroll', read, { passive: true })
+    window.addEventListener('resize', read)
+    read()
+    return () => { sc.removeEventListener('scroll', read); window.removeEventListener('resize', read) }
+  }, [frames])
+
+  // Tick: ritar prints, titlar, lampa — så länge sidan syns
+  useEffect(() => {
+    if (!frames) return
+    let raf = 0, running = true
+    const tick = () => {
+      if (!running) return
+      raf = requestAnimationFrame(tick)
+      const now = performance.now()
+      const p = progressRef.current
+      const W = window.innerWidth, H = window.innerHeight
+      // lampan: följ målet, annars andas
+      const l = lamp.current
+      if (now - l.lastMove > 3500 || reduced.current) {
+        const t = now / 1000
+        l.tx = 0.5 + 0.17 * Math.sin(t * 0.21) + 0.05 * Math.sin(t * 0.53)
+        l.ty = 0.5 + 0.12 * Math.sin(t * 0.16 + 1.3)
+      }
+      l.x += (l.tx - l.x) * 0.06; l.y += (l.ty - l.y) * 0.06
+      const d = dr.current
+      if (d) d.clear()
       frames.forEach((f, i) => {
-        const el = elRefs.current[i]
-        if (!el) return
-        const x = progress - i
-        if (Math.abs(x) > 1.3) { if (el.style.opacity !== '0') el.style.opacity = '0'; return }
-        el.style.opacity = String(fade(x))
-        if (f.type === 'image') {
+        const x = p - i
+        const alpha = Math.abs(x) > 1.3 ? 0 : fade(x)
+        if (f.type === 'title') {
+          const el = elRefs.current[i]
+          if (el) { const v = String(alpha); if (el.style.opacity !== v) el.style.opacity = v }
+          return
+        }
+        if (nativeMode) {
+          const el = elRefs.current[i]
+          if (!el) return
+          el.style.opacity = String(alpha)
           const s = reduced.current ? 1 : 1 + 0.035 * clamp(Math.abs(x), 0, 1)
           el.style.transform = `translate(-50%,-50%) scale(${s.toFixed(4)})`
+          return
         }
+        if (!d || alpha <= 0) return
+        const tex = texs.current[i]
+        if (!tex || !tex.ready) return
+        if (Math.abs(x) < 0.5 && !devSince.current[i]) devSince.current[i] = now
+        const since = devSince.current[i]
+        const dev = since ? clamp((now - since) / DEV_MS, 0, 1) : 0
+        const paperIn = since ? clamp((now - since) / PAPER_MS, 0, 1) : 0
+        if (!since) return
+        const rect = containRect(tex.w, tex.h, W, H, W < 600 ? 0.94 : 0.92, W < 600 ? 0.80 : 0.88)
+        // printen hålls: liten parallax mot lampan, och glider upp när den tas ur tråget
+        rect.x += (0.5 - l.x) * 6; rect.y += (0.5 - l.y) * 4 + (reduced.current ? 0 : -x * 18)
+        const lampUv = [(l.x * W - rect.x) / rect.w, (l.y * H - rect.y) / rect.h]
+        d.drawPrint(tex, rect, { dev, paperIn, lamp: lampUv, lampPower: 1, time: now / 1000, alpha, grain: 0.035 })
       })
-      const a = clamp(Math.round(progress), 0, frames.length - 1)
-      if (a !== last) { last = a; setActive(a) }
     }
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(paint) }
-    sc.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    paint()
-    return () => { sc.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf) }
-  }, [frames])
+    raf = requestAnimationFrame(tick)
+    const vis = () => { if (document.hidden) { running = false; cancelAnimationFrame(raf) } else if (!running) { running = true; raf = requestAnimationFrame(tick) } }
+    document.addEventListener('visibilitychange', vis)
+    return () => { running = false; cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', vis) }
+  }, [frames, nativeMode])
 
   // Ladda bild-src för aktiv ram ± 1 (och de två första). Laddade behålls.
   useEffect(() => {
@@ -477,6 +623,49 @@ function Room() {
       return changed ? next : prev
     })
   }, [frames, active])
+
+  // Bild laddad → textur + tonalitet (mått läses synkront i handlern, aldrig i uppdateraren)
+  const onImgLoad = (i, ev) => {
+    const el = ev.currentTarget
+    const w = el.naturalWidth, h = el.naturalHeight
+    setDims((x) => x[i] ? x : { ...x, [i]: { w, h } })
+    tone.current[i] = tonality(el)
+    if (dr.current && !nativeMode) {
+      const t = texs.current[i] || dr.current.texture()
+      texs.current[i] = t
+      if (!t.upload(el)) { caught.push('textur ' + i + ' (CORS?) — nativt läge'); setNativeMode(true) }
+    }
+    if (soundOn && sound.current && i === activeRef.current) sound.current.tone(tone.current[i], false)
+  }
+  const onImgError = (i) => { caught.push('bild ' + i + ' kunde inte laddas (CORS?) — nativt läge'); setNativeMode(true) }
+
+  // Ljud följer aktiv ram
+  useEffect(() => {
+    if (!soundOn || !sound.current || !frames) return
+    const f = frames[active]
+    if (!f) return
+    if (f.type === 'title') sound.current.tone({ mean: 0.3, sd: 0.1 }, true)
+    else if (tone.current[active]) sound.current.tone(tone.current[active], false)
+  }, [active, soundOn, frames])
+  const toggleSound = () => {
+    if (!sound.current) { try { sound.current = createSound() } catch (e) { caught.push('ljud: ' + (e.message || e)) } }
+    if (!sound.current) return
+    if (soundOn) { sound.current.off(); setSoundOn(false) } else { sound.current.on(); setSoundOn(true) }
+  }
+  useEffect(() => () => { sound.current?.dispose() }, [])
+
+  // Närvaro: hur många är i rummet just nu
+  useEffect(() => {
+    if (!supabase || !supabase.channel) return
+    let ch
+    try {
+      const key = Math.random().toString(36).slice(2)
+      ch = supabase.channel('obscura-room', { config: { presence: { key } } })
+      ch.on('presence', { event: 'sync' }, () => { try { setPresent(Object.keys(ch.presenceState()).length) } catch (e) { /* tyst */ } })
+      ch.subscribe((status) => { if (status === 'SUBSCRIBED') ch.track({ at: Date.now() }).catch(() => {}) })
+    } catch (e) { caught.push('närvaro: ' + (e.message || e)) }
+    return () => { try { ch && supabase.removeChannel(ch) } catch (e) { /* tyst */ } }
+  }, [])
 
   // Läs Content Credentials + HDR-markörer för aktiv bild (en gång per bild).
   useEffect(() => {
@@ -564,27 +753,41 @@ function Room() {
     ? `${d ? `${d.w} × ${d.h}` : `${cur.w} × ${cur.h}`}${m?.bytes ? `, ${(m.bytes / 1048576).toFixed(1)} MB` : ''}, ${m?.hdr ? (m.hdr.gainMap ? 'HDR (gain map)' : 'SDR, ingen gain map') : ''}`
     : ''
   const e = env.current
+  const showHint = active === 0 && !nativeMode
 
   return (
     <div className="ob-root">
       <style>{css}</style>
 
       <div className="ob-stage" aria-hidden="true">
+        {!nativeMode && <canvas className="ob-canvas" ref={canvasRef} />}
         {frames && frames.map((f, i) => f.type === 'title' ? (
           <div key={i} className="ob-title" style={i === 0 ? { opacity: 1 } : undefined} ref={(el) => { elRefs.current[i] = el }}>
             {i === 0 ? <h1>{f.title}</h1> : <h2>{f.title}</h2>}
             <p>{f.sub}</p>
           </div>
-        ) : (
+        ) : nativeMode ? (
           <img
-            key={i}
+            key={'n' + i}
             className="ob-img"
             ref={(el) => { elRefs.current[i] = el }}
             src={srcs[i] || undefined}
             alt=""
             decoding="async"
             draggable={false}
-            onLoad={(ev) => { const w = ev.currentTarget.naturalWidth, h = ev.currentTarget.naturalHeight; setDims((x) => x[i] ? x : { ...x, [i]: { w, h } }) }}
+            onLoad={(ev) => onImgLoad(i, ev)}
+          />
+        ) : (
+          <img
+            key={'l' + i}
+            className="ob-loader"
+            ref={(el) => { imgRefs.current[i] = el }}
+            src={srcs[i] || undefined}
+            crossOrigin="anonymous"
+            alt=""
+            decoding="async"
+            onLoad={(ev) => onImgLoad(i, ev)}
+            onError={() => onImgError(i)}
           />
         ))}
       </div>
@@ -596,10 +799,12 @@ function Room() {
       <div className="ob-ui">
         <div className="ob-corner ob-tl">
           <a className="ob-logo" href="/">Gaahlin</a>
-          <span>Obscura, prototyp 0.1</span>
+          <span>Obscura, prototyp 0.2</span>
         </div>
         <div className="ob-corner ob-tr">
           <a href="/">Stäng</a>
+          <a href="/spegeln">Spegeln</a>
+          <button type="button" aria-pressed={soundOn} onClick={toggleSound}>{soundOn ? 'Ljud på' : 'Ljud'}</button>
         </div>
 
         {frames && (
@@ -609,6 +814,8 @@ function Room() {
             ))}
           </div>
         )}
+
+        {frames && <div className="ob-hint" style={{ opacity: showHint ? 1 : 0 }}>Scrolla. Du håller lampan.</div>}
 
         {cur && cur.type === 'image' && (
           <div className="ob-corner ob-bl">
@@ -643,17 +850,18 @@ function Room() {
         )}
 
         <div className="ob-corner ob-br" aria-label="Teknik">
+          {present > 0 && <div>{present === 1 ? 'Du är ensam i rummet' : `${present} i rummet`}</div>}
+          <div>{nativeMode ? 'Nativ scen' : 'Mörkrum, WebGL'}</div>
           <div>Skärm {e.hdr ? 'HDR' : 'SDR'}, {e.p3 ? 'P3' : 'sRGB'}</div>
           <div>WebGPU {e.webgpu ? 'ja' : 'nej'}</div>
-          <div>Scroll-driven CSS {e.sda ? 'ja' : 'nej'}</div>
         </div>
 
         {note && <div className="ob-note"><div>{note}<br /><a href="/">Till gaahlin.com</a></div></div>}
         {debug.current && (
           <div className="ob-debug">{[
-            `frames ${frames ? frames.length : 'null'}  active ${active}  note ${note ? JSON.stringify(note) : '-'}`,
-            `scroller ${dbg ? `vh ${dbg.vh}  scrollTop ${dbg.scrollTop}  progress ${dbg.progress}` : 'paint() har inte körts'}`,
-            `supabase ${supabase ? 'ok' : 'null'}  meta ${m ? m.state : '-'}  verify ${m?.verify?.state || '-'}`,
+            `frames ${frames ? frames.length : 'null'}  active ${active}  läge ${nativeMode ? 'nativ' : 'webgl'}  note ${note ? JSON.stringify(note) : '-'}`,
+            `scroller ${dbg ? `vh ${dbg.vh}  scrollTop ${dbg.scrollTop}  progress ${dbg.progress}` : 'ingen scroll ännu'}`,
+            `supabase ${supabase ? 'ok' : 'null'}  meta ${m ? m.state : '-'}  verify ${m?.verify?.state || '-'}  texturer ${Object.keys(texs.current).length}  ljud ${soundOn ? 'på' : 'av'}  närvaro ${present}`,
             `ua ${typeof navigator !== 'undefined' ? navigator.userAgent.replace(/^.*?(Version\/[\d.]+|Chrome\/[\d.]+).*$/, '$1') : '-'}`,
             caught.length ? 'fel: ' + caught.slice(-3).join(' | ') : 'inga fångade fel',
           ].join('\n')}</div>

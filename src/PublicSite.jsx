@@ -1,4 +1,22 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.11.1 — Honeypottens maskering flyttad till klassen .hp-field i index.css (se den filen). Ett dolt,
+//   bortpositionerat inmatningsfält inuti ett formulär är en känd nätfiskesignatur; macOS klistra-in-skydd
+//   blockerade den här filen på den (2026-09-06, andra gången på denna fil). Ligger maskeringen i CSS och
+//   fältet i JSX bär ingen av filerna mönstret. Spamskyddet är oförändrat — handlern läser fortfarande
+//   data.get('website'). Rör inte tillbaka stilen hit.
+// v0.11.0 — Hero-bilden tillbaka (Anders 2026-09-06: "vi kan inte börja med galleri som kommer nedanför").
+//   Heron är åter en stillbild ur site_content (hero_image; tomt fält = repo-filen /images/intro/me_bw.jpg),
+//   vilket gör Innehåll-sektionens hero-fält verksamt igen — inget behövde ändras i adminet, fältet var
+//   föräldralöst, inte trasigt. Bilden GLIDER IN: opacity 0→1 och scale 1,035→1 på 1400 ms med sajtens
+//   klippkurva cubic-bezier(.2,.7,.2,1), startad av bildens egen `load` (aldrig en timer). Skala, inte
+//   förskjutning: object-fit är `contain`, så en translate skulle blotta svarta kanter. `prefers-reduced-motion`
+//   ⇒ ren toning 400 ms (index.css v0.5.0).
+//   TVÅ NODER, inte en: ytterdiven (heroImgRef) äger scroll-parallaxen som skriver transform direkt, <img>
+//   inuti äger inglidningen. På samma nod skulle de slåss om transform och heron hacka första sekunden.
+//   Heron väntar på site_content (liten tabell) men aldrig längre än 1200 ms — timeouten släpper fram
+//   default-bilden om DB:n hänger. `key={heroUrl}` gör att en sent inkommen URL spelar upp inglidningen
+//   i stället för att poppa. Rummet är kvar som ÖVERLÄGG ur galleriet — oförändrat. Sidoeffekt: första
+//   bilden väntar inte längre på den tunga fetchPool-frågan.
 // v0.10.0 — Rummet flyttar in (Arc 8). Hero = <Room mode="hero"> (Klippet.jsx): filmen med Anders porträtt,
 //   matchklipp på ögonen, hänglinje, dissolve för bilder med bakgrund; sajtens nav och hero-metan ligger ovanpå.
 //   Galleriet är indexet: tryck på en bild öppnar <Room mode="overlay"> på just den bilden, filmen fortsätter,
@@ -26,7 +44,7 @@
 // i bucket 'gaahlin-public' — inga portfoliobilder i repot längre.
 // Hero/om-mig pekar på faktiska repo-sökvägar (intro/, about/).
 // Behåller: nav + språkväxlare (SV/NO/DK/FI/EN), mobilmeny, hero, statement, about,
-// kontakt (Supabase-insert till gaahlin.contacts), footer, lightbox (över alla bilder).
+// kontakt (Supabase-insert till gaahlin.contacts), footer. (Lightboxen togs bort i v0.10.0.)
 
 import { useEffect, useRef, useState } from 'react'
 import './index.css'
@@ -53,6 +71,10 @@ function useColumns() {
 }
 
 const aspectOf = (im) => (im.width && im.height ? im.width / im.height : 1.5)
+
+// Hur länge heron som mest väntar på site_content innan default-bilden släpps fram.
+// site_content är en liten tabell; spärren finns för att en hängande DB aldrig ska ge svart hero.
+const HERO_WAIT_MS = 1200
 
 // Delar en bildlista i rader om max `cols` bilder.
 function chunkRows(images, cols) {
@@ -193,7 +215,11 @@ export default function PublicSite() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const formFirstFocusRef = useRef(0)
   const [siteDb, setSiteDb] = useState({})   // redaktionellt innehåll ur gaahlin.site_content
+  const [siteReady, setSiteReady] = useState(false)  // site_content avgjord (svar, fel eller timeout)
+  const [heroReady, setHeroReady] = useState(false)  // hero-bilden laddad ⇒ inglidningen startar
   const c = resolveContent(siteDb, currentLang)   // spamskydd: när besökaren först rörde formuläret
+  // Hero-bilden: satt i adminet (Innehåll → Hero) eller repo-filen när fältet är tomt.
+  const heroUrl = c.hero_image ? publicImageUrl(c.hero_image) : '/images/intro/me_bw.jpg'
   const [galleries, setGalleries] = useState([])   // [{...galleri, images:[{...bild, url, flatIndex, uid}]}]
   const cols = useColumns()
 
@@ -234,18 +260,30 @@ export default function PublicSite() {
   }, [])
 
   // Redaktionellt innehåll (text + bildplatser). Fel ⇒ tomt ⇒ DEFAULTS.
+  // Heron väntar på svaret (så rätt bild visas direkt i stället för att poppa), men aldrig längre
+  // än HERO_WAIT_MS: hänger databasen släpps default-bilden fram ändå. Kommer svaret senare och
+  // pekar på en annan bild spelas inglidningen upp på nytt (key={heroUrl}) i stället för att poppa.
   useEffect(() => {
     let active = true
-    fetchSiteContent().then((db) => { if (active) setSiteDb(db) })
-    return () => { active = false }
+    const release = () => { if (active) setSiteReady(true) }
+    const timer = setTimeout(release, HERO_WAIT_MS)
+    fetchSiteContent()
+      .then((db) => { if (active) setSiteDb(db) })
+      .catch(() => {})
+      .finally(() => { clearTimeout(timer); release() })
+    return () => { active = false; clearTimeout(timer) }
   }, [])
+
+  // Byts hero-bilden (adminet, eller ett sent DB-svar) börjar inglidningen om från noll.
+  useEffect(() => { setHeroReady(false) }, [heroUrl])
 
   // Uppdatera <html lang> när språk byts
   useEffect(() => {
     document.documentElement.lang = currentLang
   }, [currentLang])
 
-  // Scroll: nav.scrolled + heron (rummet) tonas och krymper svagt när man scrollar förbi
+  // Scroll: nav.scrolled + heron (bilden) tonas och krymper svagt när man scrollar förbi.
+  // Skriver transform/opacity på YTTERDIVEN — <img> inuti äger inglidningen, så de två aldrig krockar.
   useEffect(() => {
     let ticking = false
     const onScroll = () => {
@@ -438,9 +476,18 @@ export default function PublicSite() {
 
       <section id="hero" ref={heroSectionRef}>
         <div ref={heroImgRef} style={{ position: 'absolute', inset: 0, willChange: 'transform, opacity' }}>
-          <RoomBoundary>
-            <Room mode="hero" pool={pool} active={!roomOpen} />
-          </RoomBoundary>
+          {siteReady && (
+            <img
+              key={heroUrl}
+              className={`hero-img${heroReady ? ' settled' : ''}`}
+              src={heroUrl}
+              alt="Gaahlin Photography"
+              fetchPriority="high"
+              decoding="async"
+              onLoad={() => setHeroReady(true)}
+              onError={() => setHeroReady(true)}
+            />
+          )}
         </div>
         <div className="hero-bottom" style={{ pointerEvents: 'none' }}>
           <div className="hero-meta">
@@ -540,8 +587,9 @@ export default function PublicSite() {
           onSubmit={handleSubmit}
           onFocus={() => { if (!formFirstFocusRef.current) formFirstFocusRef.current = Date.now() }}
         >
-          {/* Honeypot — osynligt för människor, ifyllt av bottar. Inte display:none (vissa bottar hoppar över det). */}
-          <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 0, width: '1px', height: '1px', overflow: 'hidden' }}>
+          {/* Honeypot — osynligt för människor, ifyllt av bottar. Maskeringen ligger i .hp-field (index.css),
+              aldrig som inline-stil här: se filhuvudet, v0.11.1. */}
+          <div aria-hidden="true" className="hp-field">
             <label htmlFor="contact-website">Website</label>
             <input id="contact-website" type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
           </div>

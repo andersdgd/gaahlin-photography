@@ -1,4 +1,6 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.12.0 — Kontakter: ta bort meddelanden (enskilt + flera via kryssrutor), ConfirmModal,
+//   RLS contacts_admin_delete (fanns redan). Bakgrund: kontaktformuläret spammas av bottar.
 // v0.11.1 — admin-nav ommöblerad: Bilder & gallerier överst, sedan Kontakter, Bokningar, Kunder.
 // v0.11.0 — Arc 5: Bokningar-sektion (gaahlin.bookings) — inkomna förfrågningar
 //   från sidan /boka, med statushantering (ny/bekräftad/genomförd/avböjd) + radera.
@@ -276,35 +278,96 @@ export default function AdminApp() {
 
 function Kontakter() {
   const [rows, setRows] = useState(null)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [confirmIds, setConfirmIds] = useState(null)   // array av id att ta bort, eller null
 
   useEffect(() => {
     let active = true
     supabase.from('contacts').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
       if (!active) return
-      if (error) { setError(true); return }
+      if (error) { setError('Kunde inte hämta kontakter.'); return }
       setRows(data || [])
     })
     return () => { active = false }
   }, [])
 
+  const toggle = (id) => setSelected((s) => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const toggleAll = () => setSelected((s) =>
+    rows && s.size === rows.length ? new Set() : new Set((rows || []).map((r) => r.id)))
+
+  const performDelete = async () => {
+    if (busy || !confirmIds?.length) return
+    setBusy(true); setError('')
+    const { error } = await supabase.from('contacts').delete().in('id', confirmIds)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    const gone = new Set(confirmIds)
+    setRows((rs) => rs.filter((r) => !gone.has(r.id)))
+    setSelected((s) => { const n = new Set(s); gone.forEach((id) => n.delete(id)); return n })
+    setConfirmIds(null)
+  }
+
+  const allSelected = rows && rows.length > 0 && selected.size === rows.length
+
   return (
     <div>
       <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Kontakter</h2>
-      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 24px' }}>Inkomna meddelanden från kontaktformuläret.</p>
-      {error && <p style={ui.muted}>Kunde inte hämta kontakter.</p>}
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 20px' }}>Inkomna meddelanden från kontaktformuläret.</p>
+
+      {rows && rows.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', paddingBottom: '10px', borderBottom: '1px solid #1c1c1c' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#aaa', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!allSelected} onChange={toggleAll} disabled={busy} />
+            {allSelected ? 'Avmarkera alla' : 'Markera alla'}
+          </label>
+          <span style={{ flex: 1 }} />
+          <button
+            style={{ ...ui.ghost, color: selected.size ? '#c98a8a' : '#555', borderColor: selected.size ? '#5a2e2e' : '#2a2a2a' }}
+            onClick={() => setConfirmIds([...selected])}
+            disabled={busy || selected.size === 0}
+          >
+            Ta bort valda{selected.size ? ` (${selected.size})` : ''}
+          </button>
+        </div>
+      )}
+
+      {error && <p style={ui.err}>{error}</p>}
       {rows === null && !error && <p style={ui.muted}>Laddar…</p>}
       {rows && rows.length === 0 && <p style={ui.muted}>Inga meddelanden än.</p>}
       {rows && rows.map((r) => (
-        <div key={r.id} style={{ borderBottom: '1px solid #1c1c1c', padding: '16px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '6px' }}>
-            <span style={{ fontWeight: 500 }}>{r.name}</span>
-            <span style={{ ...ui.muted, fontSize: '12px', whiteSpace: 'nowrap' }}>{new Date(r.created_at).toLocaleString('sv-SE')}</span>
+        <div key={r.id} style={{ display: 'flex', gap: '14px', borderBottom: '1px solid #1c1c1c', padding: '16px 0', background: selected.has(r.id) ? '#111' : 'transparent' }}>
+          <input
+            type="checkbox"
+            checked={selected.has(r.id)}
+            onChange={() => toggle(r.id)}
+            disabled={busy}
+            style={{ marginTop: '4px', flexShrink: 0 }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '6px' }}>
+              <span style={{ fontWeight: 500, overflowWrap: 'anywhere' }}>{r.name}</span>
+              <span style={{ ...ui.muted, fontSize: '12px', whiteSpace: 'nowrap' }}>{new Date(r.created_at).toLocaleString('sv-SE')}</span>
+            </div>
+            <a href={`mailto:${r.email}`} style={{ color: '#8ab4f8', fontSize: '13px', textDecoration: 'none', overflowWrap: 'anywhere' }}>{r.email}</a>
+            <p style={{ margin: '8px 0 10px', color: '#cfcfcf', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{r.message}</p>
+            <button style={{ ...ui.ghost, color: '#c98a8a', borderColor: '#5a2e2e' }} onClick={() => setConfirmIds([r.id])} disabled={busy}>Ta bort</button>
           </div>
-          <a href={`mailto:${r.email}`} style={{ color: '#8ab4f8', fontSize: '13px', textDecoration: 'none' }}>{r.email}</a>
-          <p style={{ margin: '8px 0 0', color: '#cfcfcf', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{r.message}</p>
         </div>
       ))}
+
+      {confirmIds && (
+        <ConfirmModal
+          title={confirmIds.length === 1 ? 'Ta bort meddelandet?' : `Ta bort ${confirmIds.length} meddelanden?`}
+          body="Meddelandet raderas permanent. Detta går inte att ångra."
+          onConfirm={performDelete}
+          onCancel={() => setConfirmIds(null)}
+          busy={busy}
+        />
+      )}
     </div>
   )
 }

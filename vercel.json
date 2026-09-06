@@ -1,4 +1,10 @@
 {
+  "redirects": [
+    { "source": "/gaze", "destination": "/", "permanent": true },
+    { "source": "/contact", "destination": "/", "permanent": true },
+    { "source": "/poncho", "destination": "/", "permanent": true },
+    { "source": "/blues", "destination": "/", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]

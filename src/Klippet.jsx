@@ -1,4 +1,12 @@
 // Gaahlin Photography — Klippet.jsx (rummet, Arc 8)
+// v0.5.0 — Övergången väljs per bildpar ur bildernas egna kanter (mätta vid förladdning, 32×32 via canvas — CORS grön):
+//   • Svart möter svart (båda bildernas kanter < 8 % luminans): det hårda klippet på ögonen, som förut (560 ms glid).
+//   • Annars: dissolve — B tonas in ovanpå A under 1 200 ms medan A tonas ut, mjuk kurva i båda ändar
+//     (cubic-bezier(.4,0,.2,1)); B börjar ögon- och storleksmatchad (skalan klämd 0,85–1,2, vidbild 1,12) och glider
+//     till vila under samma tid. Två bilder lever samtidigt i rummet under övergången; A behåller sin andning.
+//   • Kapitelbyte: genom svart — A ut 500 ms, 150 ms svart, B in 900 ms (hårt klipp-par: 120 ms svart som förut).
+//   • Öppningen tonas in 900 ms om bilden har bakgrund; på svart tänds den direkt.
+//   Reduced motion: inga toningar, allt landar direkt.
 // v0.4.0 — Anders styrning 2026-09-06: kameran och allt kring "blick" är borttaget (blickbedömningen höll inte mot
 //   riktiga porträtt). I stället effekter ur det som ÄR bekräftat på hans bilder — ögonens läge, ansiktets storlek,
 //   ljusets riktning/hårdhet, tonalitet, fokuspunkt:
@@ -136,6 +144,24 @@ async function fetchPool(gSlug) {
   }
   return pool
 }
+// Kanternas luminans (0..1) ur en laddad bild — avgör om bilden står på svart. null om canvas inte får läsa.
+function edgeLuminance(img) {
+  try {
+    const n = 32
+    const c = document.createElement('canvas'); c.width = n; c.height = n
+    const x = c.getContext('2d', { willReadFrequently: true })
+    x.drawImage(img, 0, 0, n, n)
+    const d = x.getImageData(0, 0, n, n).data
+    let sum = 0, cnt = 0
+    for (let y = 0; y < n; y++) for (let xx = 0; xx < n; xx++) {
+      if (y > 1 && y < n - 2 && xx > 1 && xx < n - 2) continue
+      const i = (y * n + xx) * 4
+      sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; cnt++
+    }
+    return sum / cnt / 255
+  } catch (e) { return null }
+}
+const isDark = (p) => (Number.isFinite(p.edge) ? p.edge < EDGE_DARK : p.m < 0.12)
 // Närvaro: ansiktets storlek i ramen × ljusets hårdhet — det klipparen väljer starkaste bild på.
 const presence = (p) => (p.sc > 0 ? p.sc * (0.5 + 0.5 * (Number.isFinite(p.h) ? p.h : 0.5)) : 0)
 const cosine = (a, b) => { let s = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i] * b[i]; return s }
@@ -151,7 +177,14 @@ const HOLD_MS = 260         // tryck längre än så = håll, kortare = tapp
 const HANG = 0.42           // hänglinjen: ögonen på 42 % av scenens höjd
 const HANG_MIN = 0.85       // bilden får krympa högst så här mycket för att nå linjen
 const MATCH_MIN = 0.7, MATCH_MAX = 1.8   // skalmatchning vid klipp, klämd
-const PANO_IN = 1.25        // vidbild öppnar 25 % närmare fokus
+const PANO_IN = 1.25        // vidbild öppnar 25 % närmare fokus (hårt klipp)
+const DISSOLVE_MS = 1200    // dissolve mellan bilder med bakgrund
+const DISSOLVE_EASE = 'cubic-bezier(.4,0,.2,1)'
+const DISSOLVE_MATCH = [0.85, 1.2]   // skalmatchning under dissolve, mjukare
+const PANO_IN_SOFT = 1.12
+const FADE_OUT_MS = 500, FADE_GAP_MS = 150, FADE_IN_MS = 900   // genom svart vid kapitelbyte
+const OPEN_FADE_MS = 900
+const EDGE_DARK = 0.08      // kanternas luminans under detta = "på svart"
 const BREATH = 0.05         // andningen: 5 % under bildens tid
 const CHAPTER_MS = 120      // kapitelandningen: svart vid gallerbyte
 // Tempo: dwell per bild = bas × (0,8 + 2·sd, klämt 0,7–1,5) × (1,15 vid stark närvaro) × besökarens takt (0,5–2).
@@ -339,7 +372,10 @@ function Room() {
   const [cur, setCur] = useState(null)
   const [cutNo, setCutNo] = useState(0)
   const [trace, setTrace] = useState(null)
-  const stageRef = useRef(null), printRef = useRef(null), ringRef = useRef(null)
+  const stageRef = useRef(null), ringRef = useRef(null)
+  const nodes = useRef({})                          // pool-id → { el, breath }
+  const [prev, setPrev] = useState(null)            // bilden som tonas ut under en dissolve
+  const prevTimer = useRef(null)
   const sizeRef = useRef(size)
   const pending = useRef(null)
   const dwell = useRef({})
@@ -353,7 +389,6 @@ function Room() {
   // Närmare: håll (pekare).
   const pointer = useRef({ down: false, t: 0, x: 0, y: 0, moved: false, held: false, timer: null })
   const [closer, setCloser] = useState(0)          // 0 = vila, annars skalfaktor
-  const breathRef = useRef(null)
   const [blank, setBlank] = useState(false)        // kapitelandningen
   // Beviset på begäran.
   const [proofOpen, setProofOpen] = useState(false)
@@ -390,12 +425,13 @@ function Room() {
     loaded.current = new Set()
     const c = createCutter(pool, seed)
     setCutter(c)
-    if (!pool[0].url) { pool.forEach((p) => loaded.current.add(p.id)); setLoadedCount(pool.length); return }
+    if (!pool[0].url) { pool.forEach((p) => { p.edge = 0.157 * p.m; loaded.current.add(p.id) }); setLoadedCount(pool.length); return }
     let alive = true
     const imgs = pool.map((p) => {
       const im = new Image()
+      im.crossOrigin = 'anonymous'   // samma CORS-läge som <img> i rummet → en hämtning, och kanterna får läsas
       im.decoding = 'async'
-      im.onload = () => { if (!alive) return; loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
+      im.onload = () => { if (!alive) return; p.edge = edgeLuminance(im); loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
       im.onerror = () => { caught.push('bild laddade inte: ' + p.url) }
       im.src = p.url
       return im
@@ -422,12 +458,15 @@ function Room() {
     dwell.current[A.id] = now - lastT.current
     const B = res.B
     const fa = focusAt(A, W, H), fb = focusAt(B, W, H)
-    // Skalmatchning: B börjar med ansiktet lika stort som A:s (ögonen på A:s ögon); vidbild öppnar närmare fokus.
+    // Övergång: svart möter svart → hårt klipp; annars dissolve. Skalmatchning: B börjar med ansiktet lika stort
+    // som A:s (ögonen på A:s ögon); vidbild öppnar närmare fokus. Under dissolve mjukare skalor.
+    const dissolve = !(isDark(A) && isDark(B)) && !reduced
+    const [mMin, mMax] = dissolve ? DISSOLVE_MATCH : [MATCH_MIN, MATCH_MAX]
     let s0 = 1
-    if (A.sc > 0 && B.sc > 0) s0 = Math.max(MATCH_MIN, Math.min(MATCH_MAX, (A.sc * fa.r.h) / (B.sc * fb.r.h)))
-    else if (!(B.sc > 0)) s0 = PANO_IN
+    if (A.sc > 0 && B.sc > 0) s0 = Math.max(mMin, Math.min(mMax, (A.sc * fa.r.h) / (B.sc * fb.r.h)))
+    else if (!(B.sc > 0)) s0 = dissolve ? PANO_IN_SOFT : PANO_IN
     const chapter = A.s !== B.s
-    const pd = { A, B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y, s0, chapter }
+    const pd = { A, B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y, s0, chapter, dissolve, fadeIn: dissolve ? (chapter ? FADE_IN_MS : DISSOLVE_MS) : 0 }
     lastT.current = now
     lastCut.current = now
     if (manual) {   // besökarens takt: EMA av intervallen mellan manuella klipp
@@ -437,8 +476,22 @@ function Room() {
     }
     setProofOpen(false)
     setCloser(0)
-    const show = () => { pending.current = pd; setBlank(false); setCur(B); setTrace({ ...res, glide: Math.hypot(pd.dx, pd.dy), s0, chapter }); setCutNo((n) => n + 1) }
-    if (chapter && !reduced) { clearTimeout(timer.current); setBlank(true); setTimeout(show, CHAPTER_MS) }   // kapitelandningen
+    const show = () => {
+      pending.current = pd
+      setBlank(false)
+      clearTimeout(prevTimer.current)
+      if (dissolve && !chapter) { setPrev(A); prevTimer.current = setTimeout(() => setPrev(null), DISSOLVE_MS + 80) }
+      else setPrev(null)
+      setCur(B)
+      setTrace({ ...res, glide: Math.hypot(pd.dx, pd.dy), s0, chapter, mode: dissolve ? (chapter ? 'genom svart' : 'dissolve') : (chapter ? 'klipp · kapitel' : 'klipp') })
+      setCutNo((n) => n + 1)
+    }
+    clearTimeout(timer.current)
+    if (chapter && dissolve) {   // genom svart: A ut, paus, B in
+      const a = nodes.current[A.id]
+      if (a && a.el) { a.el.style.transition = `opacity ${FADE_OUT_MS}ms ${DISSOLVE_EASE}`; a.el.style.opacity = '0' }
+      setTimeout(show, FADE_OUT_MS + FADE_GAP_MS)
+    } else if (chapter && !reduced) { setBlank(true); setTimeout(show, CHAPTER_MS) }   // kapitelandningen (hårt klipp-par)
     else show()
   }
   const cutRef = useRef(cut)
@@ -448,7 +501,8 @@ function Room() {
   // ögonen ligger på A:s ögon i A:s storlek, tvinga layout, och låt den sedan glida till vila på nästa bildruta.
   // Andningen startar samtidigt: en långsam rörelse under bildens tid. Ringen (debug) följer ögonen.
   const breathe = (p, ms) => {
-    const b = breathRef.current
+    const n = nodes.current[p && p.id]
+    const b = n && n.breath
     if (!b || !p) return
     b.style.transition = 'none'
     b.style.transform = 'scale(1)'
@@ -461,26 +515,40 @@ function Room() {
     const pd = pending.current
     if (!pd) return
     pending.current = null
-    const el = printRef.current, rg = ringRef.current
+    const n = nodes.current[pd.B.id], el = n && n.el, rg = ringRef.current
     if (!el) return
+    const ms = pd.dissolve ? pd.fadeIn : GLIDE_MS
+    const ease = pd.dissolve ? DISSOLVE_EASE : EASE
     el.style.transition = 'none'
     el.style.transform = `translate(${pd.dx}px,${pd.dy}px) scale(${pd.s0})`
+    el.style.opacity = pd.dissolve ? '0' : '1'
     if (rg) { rg.style.transition = 'none'; rg.style.left = pd.fa.x + 'px'; rg.style.top = pd.fa.y + 'px' }
     void el.offsetWidth
-    if (typeof window.__klippetOnCut === 'function') window.__klippetOnCut({ el, A: pd.A, B: pd.B, fa: pd.fa, fb: pd.fb, dx: pd.dx, dy: pd.dy, s0: pd.s0, chapter: pd.chapter })
+    if (typeof window.__klippetOnCut === 'function') window.__klippetOnCut({ el, A: pd.A, B: pd.B, fa: pd.fa, fb: pd.fb, dx: pd.dx, dy: pd.dy, s0: pd.s0, chapter: pd.chapter, dissolve: pd.dissolve, ms })
     breathe(pd.B, dwellFor(pd.B, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0))
+    const a = pd.dissolve && !pd.chapter ? nodes.current[pd.A.id] : null
     requestAnimationFrame(() => {
-      el.style.transition = reduced ? 'none' : `transform ${GLIDE_MS}ms ${EASE}`
+      el.style.transition = reduced ? 'none' : `transform ${ms}ms ${ease}, opacity ${ms}ms ${ease}`
       el.style.transform = 'translate(0,0) scale(1)'
+      el.style.opacity = '1'
+      if (a && a.el) { a.el.style.transition = `opacity ${ms}ms ${ease}`; a.el.style.opacity = '0' }
       if (rg) {
-        rg.style.transition = reduced ? 'none' : `left ${GLIDE_MS}ms ${EASE}, top ${GLIDE_MS}ms ${EASE}`
+        rg.style.transition = reduced ? 'none' : `left ${ms}ms ${ease}, top ${ms}ms ${ease}`
         rg.style.left = pd.fb.x + 'px'
         rg.style.top = pd.fb.y + 'px'
       }
     })
   }, [cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
-  // Öppningsbilden andas också.
-  useEffect(() => { if (cur && cutNo === 0) breathe(cur, dwellFor(cur, dwellMs, 1, cutter ? cutter.maxP : 0)) }, [cur, cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Öppningsbilden: tonas in om den har bakgrund, tänds direkt på svart; andas.
+  useLayoutEffect(() => {
+    if (!cur || cutNo !== 0) return
+    const n = nodes.current[cur.id]
+    if (n && n.el && !reduced && !isDark(cur)) {
+      n.el.style.transition = 'none'; n.el.style.opacity = '0'; void n.el.offsetWidth
+      requestAnimationFrame(() => { n.el.style.transition = `opacity ${OPEN_FADE_MS}ms ${DISSOLVE_EASE}`; n.el.style.opacity = '1' })
+    }
+    breathe(cur, dwellFor(cur, dwellMs, 1, cutter ? cutter.maxP : 0))
+  }, [cur, cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filmen — dwell-styrd, med klipparens tempo. Rörelse över bilden håller; närmare håller; en besökare som
   // tittar (kamera) håller; en flik i bakgrunden pausar.
@@ -563,12 +631,11 @@ function Room() {
   // Etiketten på skuggsidan: kommer ljuset från vänster (90°–270°) är skuggan till höger.
   const labelSide = cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
   // Andningens origo: ögonen, förskjutna mot ljuset (en tiondel av ansiktshöjden).
-  const breathOrigin = (() => {
-    if (!cur) return '50% 50%'
-    const k = 0.1 * (cur.sc > 0 ? cur.sc : 0.3), a = ((Number.isFinite(cur.l) ? cur.l : 90) * Math.PI) / 180
-    const ox = cur.f[0] + (k / (cur.r || 1)) * Math.cos(a), oy = cur.f[1] - k * Math.sin(a)
+  const breathOriginOf = (p) => {
+    const k = 0.1 * (p.sc > 0 ? p.sc : 0.3), a = ((Number.isFinite(p.l) ? p.l : 90) * Math.PI) / 180
+    const ox = p.f[0] + (k / (p.r || 1)) * Math.cos(a), oy = p.f[1] - k * Math.sin(a)
     return `${(Math.max(0, Math.min(1, ox)) * 100).toFixed(2)}% ${(Math.max(0, Math.min(1, oy)) * 100).toFixed(2)}%`
-  })()
+  }
 
   return (
     <div
@@ -581,17 +648,22 @@ function Room() {
       onContextMenu={(e) => e.preventDefault()}
       style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
     >
-      {cur && r && (
-        <div ref={printRef} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, willChange: 'transform', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%` }}>
-          <div ref={breathRef} style={{ width: '100%', height: '100%', transformOrigin: breathOrigin, willChange: 'transform' }}>
-            <div style={{ width: '100%', height: '100%', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}>
-              {cur.url
-                ? <img key={cur.id} src={cur.url} alt={cur.alt || ''} draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
-                : <Print key={cur.id} p={cur} />}
+      {W > 0 && [prev, cur].filter((p, i, arr) => p && arr.indexOf(p) === i).map((p) => {
+        const pr = layout(p, W, H)
+        const isCur = cur && p.id === cur.id
+        return (
+          <div key={p.id} ref={(el) => { if (el) nodes.current[p.id] = { el, breath: el.firstElementChild }; else delete nodes.current[p.id] }}
+            style={{ position: 'absolute', left: pr.x, top: pr.y, width: pr.w, height: pr.h, willChange: 'transform, opacity', transformOrigin: `${p.f[0] * 100}% ${p.f[1] * 100}%` }}>
+            <div style={{ width: '100%', height: '100%', transformOrigin: breathOriginOf(p), willChange: 'transform' }}>
+              <div style={{ width: '100%', height: '100%', transformOrigin: `${p.f[0] * 100}% ${p.f[1] * 100}%`, transform: isCur && closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}>
+                {p.url
+                  ? <img src={p.url} alt={p.alt || ''} crossOrigin="anonymous" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
+                  : <Print p={p} />}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })}
       {blank && <div style={{ position: 'absolute', inset: 0, background: '#000' }} />}
       <a href="/" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 18, top: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 19, letterSpacing: '.02em', color: '#8a8a8a', textDecoration: 'none' }}>Gaahlin</a>
       {cur && (
@@ -636,11 +708,11 @@ function Room() {
         <div style={{ position: 'absolute', left: 14, top: 40, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
           <div>
             {`klipp ${cutNo} · ${cur.uid ? 'bild' : 'print'} ${cur.id} · ${cur.s}` +
-              (trace ? ` · glid ${Math.round(trace.glide)} px · skala vid klipp ${trace.s0.toFixed(2)} · ${reduced ? 0 : GLIDE_MS} ms${trace.chapter ? ' · kapitel' : ''}` : ' · öppning') +
+              (trace ? ` · ${trace.mode} · glid ${Math.round(trace.glide)} px · skala ${trace.s0.toFixed(2)} · ${reduced ? 0 : trace.mode.startsWith('klipp') ? GLIDE_MS : trace.mode === 'genom svart' ? FADE_IN_MS : DISSOLVE_MS} ms` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
           <div>{`pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade`}</div>
-          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · andning ±${Math.round(BREATH * 100)} % mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
+          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · kant ${Number.isFinite(cur.edge) ? (cur.edge * 100).toFixed(0) + ' %' : '–'} ${isDark(cur) ? 'svart' : 'bakgrund'} · andning ±${Math.round(BREATH * 100)} % mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
           {trace && <div>{'förkastade: ' + trace.rejected.map((x) => `print ${x.B.id} (${x.s < -50 ? x.why : x.s.toFixed(1) + (x.why ? ': ' + x.why : '')})`).join(', ')}</div>}

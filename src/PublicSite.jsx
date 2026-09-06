@@ -1,4 +1,9 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.8.0 — Justerad galleri-layout. CSS `columns` (spaltflöde) ersatt med rader där
+//   varje rad får gemensam höjd och bildbredden följer bildens format (w/h ur DB).
+//   Max 3 bilder/rad (desktop), 2 (≤900px), 1 (≤500px). En ensam bild blir centrerad
+//   "hero" (stående ~55 % bredd, liggande ~85 %); en påbörjad sista rad stretchas
+//   inte utan centreras. Helt dynamiskt utifrån antal och format i varje galleri.
 // v0.7.1 — Arc 5: "Boka"-länk i nav + mobilmeny → /boka.
 // v0.7.0 — galleriet är nu DB-/Storage-drivet (CMS). Hämtar publika gallerier +
 // bilder från Supabase (gaahlin.galleries/images), bygger publika Storage-URL:er
@@ -11,6 +16,47 @@
 import { useEffect, useRef, useState } from 'react'
 import './index.css'
 import { supabase } from './lib/supabase'
+
+// === Galleri-layout: justerade rader ===
+// Antal bilder per rad beror på viewport (speglar brytpunkterna i index.css).
+function useColumns() {
+  const calc = () => {
+    if (typeof window === 'undefined') return 3
+    const w = window.innerWidth
+    return w <= 500 ? 1 : w <= 900 ? 2 : 3
+  }
+  const [cols, setCols] = useState(calc)
+  useEffect(() => {
+    let raf = 0
+    const onResize = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => setCols(calc())) }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); cancelAnimationFrame(raf) }
+  }, [])
+  return cols
+}
+
+const aspectOf = (im) => (im.width && im.height ? im.width / im.height : 1.5)
+
+// Delar en bildlista i rader om max `cols` bilder.
+function chunkRows(images, cols) {
+  const rows = []
+  for (let i = 0; i < images.length; i += cols) rows.push(images.slice(i, i + cols))
+  return rows
+}
+
+// Bredd (i % av galleriets bredd) för en rad. Fulla rader fyller kant till kant.
+// En ensam bild på desktop/tablet är en "hero"; övriga påbörjade rader krymps så de
+// inte stretchas upp till löjliga höjder, och centreras.
+function rowWidthPct(row, cols) {
+  const k = row.length
+  if (cols === 1 || k >= cols) return 100
+  if (k === 1) {
+    const a = aspectOf(row[0])
+    return a < 0.95 ? 55 : a < 1.25 ? 70 : 85
+  }
+  const base = (k / cols) * 100
+  return Math.round(base + (100 - base) / 3)
+}
 
 // SVG-flaggor (rena, samma proportioner som ursprungs-index.html)
 const flags = {
@@ -161,7 +207,8 @@ export default function PublicSite() {
   const [imgVisible, setImgVisible] = useState(false)
   const [submitNote, setSubmitNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [galleries, setGalleries] = useState([])   // [{...galleri, images:[{...bild, url, flatIndex}]}]
+  const [galleries, setGalleries] = useState([])
+  const cols = useColumns()   // [{...galleri, images:[{...bild, url, flatIndex}]}]
   const [photos, setPhotos] = useState([])         // platt lista av bild-URL:er (för lightbox)
 
   const heroImgRef = useRef(null)
@@ -484,29 +531,38 @@ export default function PublicSite() {
           >
             <p className="section-label reveal">{g.title}</p>
             <div className="gallery-grid">
-              {g.images.map((img) => {
-                const eager = img.flatIndex < 3
-                return (
-                  <div
-                    key={img.flatIndex}
-                    className="gallery-item reveal"
-                    {...(eager ? {} : { 'data-lazy': '1' })}
-                    onClick={() => openLightbox(img.flatIndex)}
-                  >
-                    {eager ? (
-                      <img src={img.url} alt={img.title || g.title} decoding="async" />
-                    ) : (
-                      <img
-                        data-src={img.url}
-                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"
-                        alt={img.title || g.title}
-                        decoding="async"
-                        style={{ minHeight: '200px', background: '#111' }}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+              {chunkRows(g.images, cols).map((row, ri) => (
+                <div
+                  key={ri}
+                  className="gallery-row"
+                  style={{ width: `${rowWidthPct(row, cols)}%` }}
+                >
+                  {row.map((img) => {
+                    const eager = img.flatIndex < 3
+                    const ar = aspectOf(img)
+                    return (
+                      <div
+                        key={img.flatIndex}
+                        className="gallery-item reveal"
+                        style={{ flexGrow: ar, aspectRatio: String(ar) }}
+                        {...(eager ? {} : { 'data-lazy': '1' })}
+                        onClick={() => openLightbox(img.flatIndex)}
+                      >
+                        {eager ? (
+                          <img src={img.url} alt={img.title || g.title} decoding="async" />
+                        ) : (
+                          <img
+                            data-src={img.url}
+                            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"
+                            alt={img.title || g.title}
+                            decoding="async"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         ))}

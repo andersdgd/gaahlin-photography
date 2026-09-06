@@ -1,4 +1,7 @@
 // Gaahlin Photography — Obscura.jsx (visningsrummet, prototyp)
+// v0.2.1 — Anders underkände väntan: bilderna ska vara omedelbara. Nativ scen (v0.1) är standard igen;
+//   mörkrummet (framkallning, lampa, parallax) ligger kvar bakom ?darkroom=1 tills riktningen är satt.
+//   Ljud och närvaro finns kvar i båda lägena. Inget annat ändrat.
 // v0.2.0 — "Levande": scenen är nu mörkrummet (WebGL, src/lib/darkroom.js). Varje bild är en print som
 //   framkallas i tråget när den blir aktiv (tätaste toner först, ojämn kemi, korn), och besökaren håller
 //   lampan: markören/lutningen flyttar en ljuspöl med baryta-sheen över printen; vid stillhet andas lampan
@@ -430,7 +433,7 @@ function Room() {
   const [soundOn, setSoundOn] = useState(false)
   const [present, setPresent] = useState(0)
   const [dbg, setDbg] = useState(null)
-  const [nativeMode, setNativeMode] = useState(() => param('native') === '1')
+  const [nativeMode, setNativeMode] = useState(() => param('darkroom') !== '1')
   const debug = useRef(param('debug') === '1')
   const scrollerRef = useRef(null)
   const canvasRef = useRef(null)
@@ -799,7 +802,7 @@ function Room() {
       <div className="ob-ui">
         <div className="ob-corner ob-tl">
           <a className="ob-logo" href="/">Gaahlin</a>
-          <span>Obscura, prototyp 0.2</span>
+          <span>Obscura, prototyp 0.2.1</span>
         </div>
         <div className="ob-corner ob-tr">
           <a href="/">Stäng</a>
@@ -851,7 +854,7 @@ function Room() {
 
         <div className="ob-corner ob-br" aria-label="Teknik">
           {present > 0 && <div>{present === 1 ? 'Du är ensam i rummet' : `${present} i rummet`}</div>}
-          <div>{nativeMode ? 'Nativ scen' : 'Mörkrum, WebGL'}</div>
+          <div>{nativeMode ? 'Omedelbar scen' : 'Mörkrum, WebGL'}</div>
           <div>Skärm {e.hdr ? 'HDR' : 'SDR'}, {e.p3 ? 'P3' : 'sRGB'}</div>
           <div>WebGPU {e.webgpu ? 'ja' : 'nej'}</div>
         </div>

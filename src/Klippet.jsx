@@ -1,4 +1,15 @@
 // Gaahlin Photography — Klippet.jsx
+// v0.7.1 — ANDNINGEN VÄNDS INÅT (Anders 2026-09-06: "jag vill vända att dom gör exakt samma sak men
+//   istället zoomar dom in"). Rörelsen är oförändrad i allt utom tecknet: samma start i scale(1), samma
+//   varaktighet (bildens dwell, lägst 1500 ms), samma kurva cubic-bezier(.33,0,.67,1), samma ankare —
+//   ögonen förskjutna mot ljuset (breathOriginOf). Bara målskalan byter håll. Den gamla regeln lät
+//   ansiktets storlek bestämma riktningen (täta porträtt utåt 0,95, vida inåt 1,05, oanalyserade utåt
+//   0,97) — den kollapsar nu till ett håll: analyserad bild 1,05, oanalyserad 1,03. Dämpningen på den
+//   oanalyserade står kvar av samma skäl som förut: utan ansikte är andningens ankare en gissning, och
+//   en gissning ska röra sig mindre. Följd att känna till: en inåtgående andning äter ~5 % av den
+//   trängsta kanten vid dwellens slut — vilorektet (layout) är fortfarande obeskuret, men andningens
+//   ändläge är det inte. Start i scale(1) är inte valfritt: matchklippet räknar B:s ögonläge mot en
+//   inre nod i vila, så en andning som startade på annat än 1 skulle flytta klippet ur matchning.
 // v0.7.0 — ÖVERLÄGGET BLÄDDRAR I ORDNING. cutter.step(A, dir) ersätter cutter.next() när mode="overlay":
 //   nästa bild är nästa i poolen, runt hörnet, från den besökaren tryckte på. Sekvenseraren (cutter.next)
 //   är byggd för hundra bilder och kollapsar på sju — N = floor(7/2) = 3 blockerar bara tre reprisser,
@@ -34,7 +45,7 @@
 //     och drar sig sedan till sin viloskala på 600 ms — klippet syns inte, bilden förvandlas. Vidbilder (utan
 //     ansikte) öppnar 25 % närmare sin fokuspunkt och drar sig ut till hela ramen.
 //   • Andningen: under bildens tid en rörelse på 5 % kring ögonen, förskjuten mot ljuset — täta porträtt drar
-//     sig utåt, vida kommer närmare. Så långsam att den inte ses börja.
+//     sig utåt, vida kommer närmare. Så långsam att den inte ses börja. (Riktningen vänd i v0.7.1.)
 //   • Kapitelandningen: 120 ms svart när galleriet byter.
 //   • Klipparen väljer på närvaro (ansiktets storlek × ljusets hårdhet) där den förut valde på blick.
 //   Kvar från v0.3.0: tempot, Närmare (håll → 2× kring ögonen), beviset bakom etiketten, wordmark, etiketten på
@@ -221,7 +232,7 @@ const PANO_IN_SOFT = 1.12
 const FADE_OUT_MS = 500, FADE_GAP_MS = 150, FADE_IN_MS = 900   // genom svart vid kapitelbyte
 const OPEN_FADE_MS = 900
 const EDGE_DARK = 0.08      // kanternas luminans under detta = "på svart"
-const BREATH = 0.05         // andningen: 5 % under bildens tid
+const BREATH = 0.05         // andningen: 5 % INÅT under bildens tid (3 % på oanalyserad bild)
 const CHAPTER_MS = 120      // kapitelandningen: svart vid gallerbyte
 // Tempo: dwell per bild = bas × (0,8 + 2·sd, klämt 0,7–1,5) × (1,15 vid stark närvaro) × besökarens takt (0,5–2).
 function dwellFor(p, base, tempo, maxP) {
@@ -559,7 +570,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
 
   // Klippögonblicket: B har just renderats i vila — flytta och skala den (utan övergång, kring sina ögon) så att
   // ögonen ligger på A:s ögon i A:s storlek, tvinga layout, och låt den sedan glida till vila på nästa bildruta.
-  // Andningen startar samtidigt: en långsam rörelse under bildens tid. Ringen (debug) följer ögonen.
+  // Andningen startar samtidigt: en långsam rörelse INÅT under bildens tid. Ringen (debug) följer ögonen.
   const breathe = (p, ms) => {
     const n = nodes.current[p && p.id]
     const b = n && n.breath
@@ -568,7 +579,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     b.style.transform = 'scale(1)'
     void b.offsetWidth
     if (reduced) return
-    const target = p.sc > .3 ? 1 - BREATH : p.sc > 0 ? 1 + BREATH : 1 - BREATH * 0.6
+    const target = p.sc > 0 ? 1 + BREATH : 1 + BREATH * 0.6
     requestAnimationFrame(() => { b.style.transition = `transform ${Math.max(1500, ms)}ms cubic-bezier(.33,0,.67,1)`; b.style.transform = `scale(${target})` })
   }
   useLayoutEffect(() => {
@@ -794,7 +805,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
           <div>{`${mode} · pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade${!active ? ' · pausad' : !inView ? ' · utanför rutan' : ''}`}</div>
-          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · kant ${Number.isFinite(cur.edge) ? (cur.edge * 100).toFixed(0) + ' %' : '–'} ${isDark(cur) ? 'svart' : 'bakgrund'} · andning ±${Math.round(BREATH * 100)} % mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
+          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · kant ${Number.isFinite(cur.edge) ? (cur.edge * 100).toFixed(0) + ' %' : '–'} ${isDark(cur) ? 'svart' : 'bakgrund'} · andning +${Math.round((cur.sc > 0 ? BREATH : BREATH * 0.6) * 100)} % inåt mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
           {trace && <div>{'förkastade: ' + trace.rejected.map((x) => `print ${x.B.id} (${x.s < -50 ? x.why : x.s.toFixed(1) + (x.why ? ': ' + x.why : '')})`).join(', ')}</div>}

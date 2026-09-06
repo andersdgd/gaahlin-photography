@@ -1,4 +1,7 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.13.0 — Ny sektion "Innehåll": redigera sajtens redaktionella text per språk (SV/NO/DK/FI/EN)
+//   + hero-/om-mig-bild + Instagram-länk. Schema/defaults i lib/siteContent.js, lagring i
+//   gaahlin.site_content (migration 0006). Tomt fält = sajtens standardtext används.
 // v0.12.0 — Kontakter: ta bort meddelanden (enskilt + flera via kryssrutor), ConfirmModal,
 //   RLS contacts_admin_delete (fanns redan). Bakgrund: kontaktformuläret spammas av bottar.
 // v0.11.1 — admin-nav ommöblerad: Bilder & gallerier överst, sedan Kontakter, Bokningar, Kunder.
@@ -18,6 +21,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { FIELDS, GROUPS, LOCALES, NEUTRAL, DEFAULTS, fetchSiteContent, publicImageUrl } from '../lib/siteContent'
 
 const BUCKET = 'gaahlin-public'
 const DELIVERIES = 'gaahlin-deliveries'
@@ -59,6 +63,7 @@ const ui = {
 
 const SECTIONS = [
   { id: 'bilder', label: 'Bilder & gallerier' },
+  { id: 'innehall', label: 'Innehåll' },
   { id: 'kontakter', label: 'Kontakter' },
   { id: 'bokningar', label: 'Bokningar' },
   { id: 'kunder', label: 'Kunder' },
@@ -268,6 +273,7 @@ export default function AdminApp() {
         {section === 'kontakter' && <Kontakter />}
         {section === 'bokningar' && <Bookings />}
         {section === 'bilder' && <GalleryManager />}
+        {section === 'innehall' && <SiteContentEditor />}
         {section === 'kunder' && <ClientManager />}
       </main>
     </div>
@@ -368,6 +374,184 @@ function Kontakter() {
           busy={busy}
         />
       )}
+    </div>
+  )
+}
+
+/* ---------------- Innehåll (redaktionell text + bilder) ---------------- */
+
+const LOCALE_LABEL = { sv: 'Svenska', no: 'Norsk', dk: 'Dansk', fi: 'Suomi', en: 'English' }
+
+function SiteContentEditor() {
+  const [db, setDb] = useState(null)        // sparat läge, { [locale]: { [key]: value } }
+  const [draft, setDraft] = useState({})    // { 'locale|key': value } — bara ändrade celler
+  const [locale, setLocale] = useState('sv')
+  const [busy, setBusy] = useState(false)
+  const [uploadingKey, setUploadingKey] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetchSiteContent().then((d) => { if (active) setDb(d) })
+    return () => { active = false }
+  }, [])
+
+  const cell = (loc, key) => `${loc}|${key}`
+  const saved = (loc, key) => db?.[loc]?.[key] ?? ''
+  const current = (loc, key) => (cell(loc, key) in draft ? draft[cell(loc, key)] : saved(loc, key))
+  const setValue = (loc, key, value) => {
+    setDraft((d) => {
+      const n = { ...d }
+      if (value === saved(loc, key)) delete n[cell(loc, key)]; else n[cell(loc, key)] = value
+      return n
+    })
+    setNote('')
+  }
+  const dirtyCount = Object.keys(draft).length
+
+  const save = async () => {
+    if (busy || !dirtyCount) return
+    setBusy(true); setError(''); setNote('')
+    const rows = Object.entries(draft).map(([k, value]) => {
+      const [loc, key] = k.split('|'); return { key, locale: loc, value }
+    })
+    const { error } = await supabase.from('site_content').upsert(rows, { onConflict: 'key,locale' })
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    // Städa ersatta bilder i storage (bara filer vi själva lagt under site/)
+    const staleImages = rows
+      .filter((r) => FIELDS.find((f) => f.key === r.key)?.kind === 'image')
+      .map((r) => saved(r.locale, r.key))
+      .filter((old) => old && old.startsWith('site/') && !rows.some((r) => r.value === old))
+    if (staleImages.length) await supabase.storage.from(BUCKET).remove(staleImages)
+    setDb((d) => {
+      const n = { ...d }
+      for (const r of rows) n[r.locale] = { ...(n[r.locale] || {}), [r.key]: r.value }
+      return n
+    })
+    setDraft({})
+    setNote(`Sparat — ${rows.length} fält uppdaterade. Sajten visar ändringen direkt.`)
+  }
+
+  const discard = () => { setDraft({}); setNote('') }
+
+  const uploadImage = async (field, e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || busy) return
+    setUploadingKey(field.key); setError('')
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const key = `site/${field.key}-${crypto.randomUUID()}.${ext}`
+    const up = await supabase.storage.from(BUCKET).upload(key, file, { cacheControl: '3600', upsert: false })
+    setUploadingKey('')
+    if (up.error) { setError(up.error.message); return }
+    setValue(NEUTRAL, field.key, key)
+  }
+
+  if (db === null) return <p style={ui.muted}>Laddar…</p>
+
+  const renderField = (f) => {
+    const loc = f.neutral ? NEUTRAL : locale
+    const value = current(loc, f.key)
+    const dirty = cell(loc, f.key) in draft
+    const def = DEFAULTS[loc]?.[f.key] ?? ''
+    const label = (
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '6px' }}>
+        <span style={{ fontSize: '13px', color: dirty ? '#fff' : '#bbb' }}>{f.label}</span>
+        {f.neutral && <span style={{ ...ui.muted, fontSize: '11px' }}>alla språk</span>}
+        {dirty && <span style={{ fontSize: '11px', color: '#d8b878' }}>ändrad</span>}
+      </div>
+    )
+
+    if (f.kind === 'image') {
+      const src = value ? publicImageUrl(value) : (f.key === 'hero_image' ? '/images/intro/me_bw.jpg' : '/images/about/me.jpg')
+      return (
+        <div key={f.key} style={{ marginBottom: '22px' }}>
+          {label}
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+            <img src={src} alt="" style={{ width: '160px', height: '110px', objectFit: 'cover', borderRadius: '6px', background: '#111', border: '1px solid #1c1c1c' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ ...ui.ghost, display: 'inline-block', cursor: uploadingKey ? 'default' : 'pointer', color: '#ddd' }}>
+                {uploadingKey === f.key ? 'Laddar upp…' : 'Byt bild'}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadImage(f, e)} disabled={busy || !!uploadingKey} />
+              </label>
+              {value && (
+                <button style={{ ...ui.ghost, color: '#999' }} onClick={() => setValue(loc, f.key, '')} disabled={busy}>Använd standardbilden</button>
+              )}
+              {f.hint && <span style={{ ...ui.muted, fontSize: '12px', maxWidth: '320px', lineHeight: 1.5 }}>{f.hint}</span>}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    const common = {
+      value,
+      placeholder: def || (f.kind === 'url' ? 'https://…' : ''),
+      onChange: (e) => setValue(loc, f.key, e.target.value),
+      disabled: busy,
+      style: { ...ui.input, marginBottom: 0, borderColor: dirty ? '#5a4a2e' : '#2a2a2a', fontFamily: 'inherit', lineHeight: 1.5 },
+    }
+    return (
+      <div key={f.key} style={{ marginBottom: '18px' }}>
+        {label}
+        {f.multiline
+          ? <textarea rows={f.key === 'contact_heading' ? 2 : 3} {...common} />
+          : <input type={f.kind === 'url' ? 'url' : 'text'} {...common} />}
+        {f.hint && <div style={{ ...ui.muted, fontSize: '12px', marginTop: '6px' }}>{f.hint}</div>}
+        {!value && def && <div style={{ ...ui.muted, fontSize: '11px', marginTop: '6px' }}>Tomt = standardtexten (visas grå ovan) används.</div>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: '720px' }}>
+      <h2 style={{ ...ui.serif, fontSize: '22px', margin: '0 0 4px', color: '#fff' }}>Innehåll</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 20px' }}>
+        Texten och bilderna på gaahlin.com. Språkfälten redigeras per flik; bilder och länkar gäller alla språk.
+      </p>
+
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '26px', flexWrap: 'wrap' }}>
+        {LOCALES.map((l) => {
+          const changed = FIELDS.some((f) => !f.neutral && cell(l, f.key) in draft)
+          return (
+            <button
+              key={l}
+              onClick={() => setLocale(l)}
+              style={{
+                ...ui.ghost, padding: '7px 14px',
+                background: locale === l ? '#1c1c1c' : 'none',
+                color: locale === l ? '#fff' : '#999',
+                borderColor: changed ? '#5a4a2e' : (locale === l ? '#333' : '#2a2a2a'),
+              }}
+            >
+              {LOCALE_LABEL[l]}{changed ? ' •' : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      {GROUPS.map((g) => (
+        <section key={g} style={{ marginBottom: '32px', paddingBottom: '8px', borderBottom: '1px solid #1c1c1c' }}>
+          <h3 style={{ ...ui.serif, fontSize: '17px', color: '#fff', margin: '0 0 14px' }}>{g}</h3>
+          {FIELDS.filter((f) => f.group === g).map(renderField)}
+        </section>
+      ))}
+
+      <div style={{ position: 'sticky', bottom: 0, background: 'rgba(10,10,10,0.92)', backdropFilter: 'blur(6px)', padding: '14px 0', display: 'flex', alignItems: 'center', gap: '10px', borderTop: '1px solid #1c1c1c' }}>
+        <button
+          style={{ ...ui.btn, width: 'auto', padding: '10px 18px', opacity: dirtyCount && !busy ? 1 : 0.5, cursor: dirtyCount && !busy ? 'pointer' : 'default' }}
+          onClick={save}
+          disabled={busy || !dirtyCount}
+        >
+          {busy ? 'Sparar…' : dirtyCount ? `Spara ${dirtyCount} ändring${dirtyCount === 1 ? '' : 'ar'}` : 'Inget att spara'}
+        </button>
+        {dirtyCount > 0 && <button style={ui.ghost} onClick={discard} disabled={busy}>Ångra</button>}
+        <span style={{ flex: 1 }} />
+        {error && <span style={ui.err}>{error}</span>}
+        {note && <span style={{ fontSize: '13px', color: '#7ec699' }}>{note}</span>}
+      </div>
     </div>
   )
 }

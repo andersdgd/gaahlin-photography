@@ -1,4 +1,9 @@
 // Gaahlin Photography — Obscura.jsx (visningsrummet, prototyp)
+// v0.1.1 — Diagnostik + robusthet efter svart sida i Safari (Chromium-repro var ren):
+//   • Felgräns (ErrorBoundary) runt hela rummet — ett körfel visas som text på sidan i stället för svart.
+//   • ?debug=1 visar en läsbar mätremsa: ramar, aktiv, scrollTop/clientHeight/progress, fångade fel.
+//   • Öppningsramen får opacity 1 inline (syns även om paint() aldrig hinner köra), NaN-vakt i paint(),
+//     scrollTop nollas vid mount, -webkit-user-select-prefix.
 // v0.1.0 — Arc 8 (experiment). Rutt: /obscura. Syfte: pröva två pelare mot verkliga skärmar och
 //   verkliga filer innan något annat byggs:
 //   1) Trohet — en bild i taget på svart, HDR när filen har gain map (webbläsaren renderar <img>
@@ -13,7 +18,7 @@
 //   den finns för testet och tas bort i en skarp version.
 //   Inga ändringar i PublicSite, index.css eller databasen.
 
-import { useEffect, useRef, useState } from 'react'
+import { Component, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 
 const BUCKET = 'gaahlin-public'
@@ -259,6 +264,34 @@ async function verifyWithC2pa(bytes) {
 }
 
 // =============================================================================================
+// Felgräns + fångade fel (visas med ?debug=1 och vid krasch)
+// =============================================================================================
+const caught = []
+if (typeof window !== 'undefined' && !window.__obscuraHooked) {
+  window.__obscuraHooked = true
+  window.addEventListener('error', (e) => caught.push('error: ' + (e.message || e)))
+  window.addEventListener('unhandledrejection', (e) => caught.push('rejection: ' + (e.reason?.message || e.reason)))
+}
+class Boundary extends Component {
+  constructor(p) { super(p); this.state = { err: null } }
+  static getDerivedStateFromError(err) { return { err } }
+  render() {
+    if (this.state.err) {
+      const e = this.state.err
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', padding: '2rem', fontFamily: 'Menlo, monospace', fontSize: 14, lineHeight: 1.6, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+          <div>Obscura kraschade i webbläsaren. Skicka den här texten till Claude:</div>
+          <div style={{ marginTop: '1rem' }}>{String(e?.message || e)}</div>
+          <div style={{ marginTop: '1rem', opacity: .6 }}>{String(e?.stack || '')}</div>
+          <div style={{ marginTop: '1rem', opacity: .6 }}>{caught.join('\n')}</div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// =============================================================================================
 // Hjälpare
 // =============================================================================================
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
@@ -279,7 +312,7 @@ function Mark({ state }) {
 const css = `
 .ob-root{position:fixed;inset:0;background:#000;color:#fff;overflow:hidden;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .ob-stage{position:absolute;inset:0;z-index:1}
-.ob-img{position:absolute;top:50%;left:50%;max-width:92vw;max-height:88%;width:auto;height:auto;object-fit:contain;transform:translate(-50%,-50%);opacity:0;will-change:opacity,transform;user-select:none;-webkit-user-drag:none}
+.ob-img{position:absolute;top:50%;left:50%;max-width:92vw;max-height:88%;width:auto;height:auto;object-fit:contain;transform:translate(-50%,-50%);opacity:0;will-change:opacity,transform;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 .ob-title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;opacity:0;will-change:opacity;padding:0 1.5rem}
 .ob-title h1,.ob-title h2{font-family:'Cormorant Garamond',serif;font-weight:300;letter-spacing:.18em;text-transform:uppercase;line-height:1.1;margin:0;color:rgba(255,255,255,.82)}
 .ob-title h1{font-size:clamp(2.2rem,6vw,5rem)}
@@ -314,6 +347,7 @@ const css = `
 .ob-dots button:focus-visible{outline:1px solid rgba(255,255,255,.5);outline-offset:2px}
 .ob-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;font-size:11px;letter-spacing:.1em;line-height:2;color:rgba(255,255,255,.5);z-index:4}
 .ob-note a{color:#fff}
+.ob-debug{position:absolute;left:50%;top:calc(1.2rem + env(safe-area-inset-top));transform:translateX(-50%);z-index:5;font-family:Menlo,monospace;font-size:13px;line-height:1.5;color:#0f0;background:rgba(0,0,0,.7);padding:.6rem .9rem;white-space:pre-wrap;max-width:90vw;pointer-events:none}
 @media (max-width:600px){.ob-br{display:none}.ob-bl{max-width:calc(100vw - 3.2rem)}.ob-dots{display:none}.ob-img{max-width:94vw;max-height:80%}}
 @media (prefers-reduced-motion:reduce){.ob-img{transition:none}}
 `
@@ -322,6 +356,10 @@ const css = `
 // Komponenten
 // =============================================================================================
 export default function Obscura() {
+  return <Boundary><Room /></Boundary>
+}
+
+function Room() {
   const [frames, setFrames] = useState(null)      // [{type:'title'|'image', ...}]
   const [note, setNote] = useState('')
   const [active, setActive] = useState(0)
@@ -329,6 +367,8 @@ export default function Obscura() {
   const [dims, setDims] = useState({})            // index → {w,h} ur den laddade bilden
   const [meta, setMeta] = useState({})            // index → {state, cred, hdr, exif, verify}
   const [panelOpen, setPanelOpen] = useState(false)
+  const [dbg, setDbg] = useState(null)         // ?debug=1 → mätremsa
+  const debug = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1')
   const scrollerRef = useRef(null)
   const elRefs = useRef([])
   const reduced = useRef(false)
@@ -393,10 +433,13 @@ export default function Obscura() {
     if (!sc || !frames) return
     let raf = 0
     let last = -1
+    if (sc.scrollTop) sc.scrollTop = 0
     const paint = () => {
       raf = 0
       const vh = sc.clientHeight || 1
       const progress = sc.scrollTop / vh
+      if (!Number.isFinite(progress)) return
+      if (debug.current) setDbg({ vh, scrollTop: sc.scrollTop, progress: progress.toFixed(3) })
       frames.forEach((f, i) => {
         const el = elRefs.current[i]
         if (!el) return
@@ -525,7 +568,7 @@ export default function Obscura() {
 
       <div className="ob-stage" aria-hidden="true">
         {frames && frames.map((f, i) => f.type === 'title' ? (
-          <div key={i} className="ob-title" ref={(el) => { elRefs.current[i] = el }}>
+          <div key={i} className="ob-title" style={i === 0 ? { opacity: 1 } : undefined} ref={(el) => { elRefs.current[i] = el }}>
             {i === 0 ? <h1>{f.title}</h1> : <h2>{f.title}</h2>}
             <p>{f.sub}</p>
           </div>
@@ -603,6 +646,15 @@ export default function Obscura() {
         </div>
 
         {note && <div className="ob-note"><div>{note}<br /><a href="/">Till gaahlin.com</a></div></div>}
+        {debug.current && (
+          <div className="ob-debug">{[
+            `frames ${frames ? frames.length : 'null'}  active ${active}  note ${note ? JSON.stringify(note) : '-'}`,
+            `scroller ${dbg ? `vh ${dbg.vh}  scrollTop ${dbg.scrollTop}  progress ${dbg.progress}` : 'paint() har inte körts'}`,
+            `supabase ${supabase ? 'ok' : 'null'}  meta ${m ? m.state : '-'}  verify ${m?.verify?.state || '-'}`,
+            `ua ${typeof navigator !== 'undefined' ? navigator.userAgent.replace(/^.*?(Version\/[\d.]+|Chrome\/[\d.]+).*$/, '$1') : '-'}`,
+            caught.length ? 'fel: ' + caught.slice(-3).join(' | ') : 'inga fångade fel',
+          ].join('\n')}</div>
+        )}
       </div>
     </div>
   )

@@ -1,4 +1,9 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.8.1 — Spamskydd på kontaktformuläret, utan externa tjänster:
+//   1) Honeypot: osynligt fält "website" som bara bottar fyller i.
+//   2) Tidskrav: minst 4 s mellan första fokus i formuläret och submit.
+//   3) Innehållsspärr: meddelande utan blanksteg (slumpsträng) avvisas.
+//   Träff ⇒ tyst "skickat" (ingen insert, ingen signal till botten). Riktiga besökare märker inget.
 // v0.8.0 — Justerad galleri-layout. CSS `columns` (spaltflöde) ersatt med rader där
 //   varje rad får gemensam höjd och bildbredden följer bildens format (w/h ur DB).
 //   Max 3 bilder/rad (desktop), 2 (≤900px), 1 (≤500px). En ensam bild blir centrerad
@@ -207,6 +212,7 @@ export default function PublicSite() {
   const [imgVisible, setImgVisible] = useState(false)
   const [submitNote, setSubmitNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const formFirstFocusRef = useRef(0)   // spamskydd: när besökaren först rörde formuläret
   const [galleries, setGalleries] = useState([])
   const cols = useColumns()   // [{...galleri, images:[{...bild, url, flatIndex}]}]
   const [photos, setPhotos] = useState([])         // platt lista av bild-URL:er (för lightbox)
@@ -411,6 +417,18 @@ export default function PublicSite() {
       email: (data.get('email') || '').toString().trim(),
       message: (data.get('message') || '').toString().trim(),
     }
+
+    // --- Spamskydd (tyst: bottar får samma "skickat" som människor) ---
+    const honeypot = (data.get('website') || '').toString()
+    const elapsed = formFirstFocusRef.current ? Date.now() - formFirstFocusRef.current : 0
+    const looksRandom = payload.message.length > 12 && !/\s/.test(payload.message)
+    if (honeypot || elapsed < 4000 || looksRandom) {
+      setSubmitNote(t.sent)
+      form.reset()
+      setIsSubmitting(false)
+      return
+    }
+
     try {
       if (!supabase) throw new Error('Supabase ej konfigurerad')
       // Default-schema är 'gaahlin' (satt i src/lib/supabase.js) → gaahlin.contacts.
@@ -598,7 +616,15 @@ export default function PublicSite() {
             </a>
           </div>
         </div>
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={handleSubmit}
+          onFocus={() => { if (!formFirstFocusRef.current) formFirstFocusRef.current = Date.now() }}
+        >
+          {/* Honeypot — osynligt för människor, ifyllt av bottar. Inte display:none (vissa bottar hoppar över det). */}
+          <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 0, width: '1px', height: '1px', overflow: 'hidden' }}>
+            <label htmlFor="contact-website">Website</label>
+            <input id="contact-website" type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+          </div>
           <div className="form-group reveal">
             <label>{t.form_name}</label>
             <input type="text" name="name" required autoComplete="name" />

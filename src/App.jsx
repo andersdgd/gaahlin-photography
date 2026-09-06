@@ -1,12 +1,12 @@
 // Gaahlin Photography — App.jsx (router)
+// v0.12.0 — Rummet bor på startsidan (PublicSite v0.10.0 använder Room ur Klippet.jsx). /obscura och /obscura/scen
+//   borttagna (okända rutter → /). Obscura.jsx importeras inte längre (pensionerad; beviset lever i lib/credentials).
 // v0.11.0 — Arc 8 pass 8.1: /obscura → Klippet (levande mockup av matchklippet, fixturpool, Klippet.jsx);
 //   scenen från v0.2.1 (riktiga bilder, Content Credentials, mörkrum bakom ?darkroom=1) flyttad till /obscura/scen.
 // v0.10.0 — Arc 8: /spegeln → Spegeln (besökaren i Gaahlins ljus, prototyp).
 // v0.9.0 — Arc 8 (experiment): /obscura → visningsrummet (prototyp, Obscura.jsx).
 //   "/"             → publik portfolio (PublicSite)
 //   "/boka"         → bokningsförfrågan (BookingPage)
-//   "/obscura"      → Klippet — matchklippet på ögonen, klipparen, dwell-film (prototyp, Klippet.jsx)
-//   "/obscura/scen" → Obscura-scenen (omedelbar scen med riktiga bilder + Content Credentials; Obscura.jsx)
 //   "/spegeln"      → Spegeln (webbkamera i Gaahlins ljus, allt på enheten)
 //   "/admin/*"      → admin (magisk länk + is_admin-gate + skal)
 //   "/kund/*"       → kundvy (magisk länk + kund-rad-gate, egna leveranser)
@@ -16,8 +16,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PublicSite from './PublicSite'
 import BookingPage from './BookingPage'
-import Obscura from './Obscura'
-import Klippet from './Klippet'
 import Spegeln from './Spegeln'
 import AdminApp from './admin/AdminApp'
 import ClientApp from './client/ClientApp'
@@ -28,8 +26,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PublicSite />} />
         <Route path="/boka" element={<BookingPage />} />
-        <Route path="/obscura" element={<Klippet />} />
-        <Route path="/obscura/scen" element={<Obscura />} />
         <Route path="/spegeln" element={<Spegeln />} />
         <Route path="/admin/*" element={<AdminApp />} />
         <Route path="/kund/*" element={<ClientApp />} />

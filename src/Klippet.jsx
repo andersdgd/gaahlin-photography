@@ -1,4 +1,13 @@
-// Gaahlin Photography — Klippet.jsx (rummet, Arc 8)
+// Gaahlin Photography — Klippet.jsx
+// v0.7.0 — ÖVERLÄGGET BLÄDDRAR I ORDNING. cutter.step(A, dir) ersätter cutter.next() när mode="overlay":
+//   nästa bild är nästa i poolen, runt hörnet, från den besökaren tryckte på. Sekvenseraren (cutter.next)
+//   är byggd för hundra bilder och kollapsar på sju — N = floor(7/2) = 3 blockerar bara tre reprisser,
+//   bruset är ±0,1 mot regler värda 2–3 poäng, och samma par vann nästan varje gång. Vänsterpil bläddrar
+//   bakåt. Ingen automatisk framflyttning i överlägget (AUTOPLAY_IN_OVERLAY = false) — bilden ska inte
+//   flytta sig medan besökaren tittar. Match-klippningen mellan bilderna är oförändrad; det är bara VALET
+//   av nästa bild som slutat vara en poängtävling. cutter.next är kvar men anropas inte längre någonstans
+//   sedan heron slutade använda rummet (PublicSite v0.11.0) — den är Arc 8:s substans och raderas inte
+//   utan Anders ord. (rummet, Arc 8)
 // v0.6.0 — Rummet flyttar in på startsidan (Anders 2026-09-06: "slår ihop allt och tar bort /obscura").
 //   Ingen egen rutt. Exporterar `Room` med två lägen och `fetchPool` (PublicSite hämtar poolen en gång och ger den
 //   till båda instanserna):
@@ -262,6 +271,10 @@ function mulberry32(seed) {
 }
 const angleDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d }
 
+// Automatisk framflyttning i överlägget. Av: besökaren bläddrar själv och bilden står still tills han
+// trycker. Sätt till true för att få filmen tillbaka i överlägget.
+const AUTOPLAY_IN_OVERLAY = false
+
 function createCutter(pool, seed) {
   const rnd = mulberry32(seed)
   const byId = Object.fromEntries(pool.map((p) => [p.id, p]))
@@ -349,7 +362,21 @@ function createCutter(pool, seed) {
     return { B, score: best.s, parts: best.parts, rejected: out.slice(1, 4) }
   }
 
-  return { open, next, seq: () => st.seq, maxP }
+  // Bläddring i poolordning — överläggets sätt att gå vidare. Ingen poängsättning, ingen reprisspärr:
+  // index + riktning, runt hörnet. dir = +1 framåt, -1 bakåt.
+  function step(A, dir) {
+    if (!pool.length) return null
+    const i = pool.findIndex((p) => p.id === A.id)
+    const B = pool[((i < 0 ? 0 : i) + dir + pool.length) % pool.length]
+    if (!B || B.id === A.id) return null
+    st.lightRun = angleDiff(A.l, B.l) < 45 ? st.lightRun + 1 : 1
+    st.serRun = B.s === A.s ? st.serRun + 1 : 1
+    st.darkCnt = B.m < .25 ? st.darkCnt + 1 : 0
+    st.seq.push(B)
+    return { B, score: 0, parts: [['ordning', 0]], rejected: [] }
+  }
+
+  return { open, next, step, seq: () => st.seq, maxP }
 }
 
 // =============================================================================================
@@ -473,14 +500,20 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     if (loaded.current.has(first.id)) { setCur(first); lastT.current = performance.now() }
   }, [cutter, loadedCount])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cut = (manual = false) => {
+  const cut = (manual = false, dir = 1) => {
     const now = performance.now()
     if (now - lastCut.current < 300 || !cutter) return
     const seq = cutter.seq()
     const A = seq[seq.length - 1]
     const { W, H } = sizeRef.current
     if (!A || !W || !H) return
-    const res = cutter.next(A, W, H, { ...dwell.current, [A.id]: now - lastT.current }, (B) => loaded.current.has(B.id))
+    // Överlägget BLÄDDRAR: nästa bild är nästa i poolen, aldrig ett resultat av poängsättning.
+    // (Sekvenseraren cutter.next är byggd för hundra bilder; på sju kollapsar den till samma par —
+    //  N = floor(7/2) = 3 blockerar bara tre reprisser och bruset är ±0,1 mot regler värda 2–3 poäng.
+    //  Anders 2026-09-06: "det skall gå från den man klickar på och medurs genom bilderna".)
+    const res = overlay
+      ? cutter.step(A, dir)
+      : cutter.next(A, W, H, { ...dwell.current, [A.id]: now - lastT.current }, (B) => loaded.current.has(B.id))
     if (!res) { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), 250); return }   // inget laddat än — försök strax igen
     dwell.current[A.id] = now - lastT.current
     const B = res.B
@@ -586,6 +619,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
   const inViewRef = useRef(true)
   const schedule = () => {
     clearTimeout(timer.current)
+    if (overlay && !AUTOPLAY_IN_OVERLAY) return   // besökaren bläddrar själv — bilden flyttar sig inte under honom
     if (holdRef.current || !activeRef.current || !inViewRef.current) return
     const p = curRef.current
     timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0) : dwellMs)
@@ -610,7 +644,8 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     if (!overlay) return
     const k = (e) => {
       if (e.key === 'Escape') { if (proofOpenRef.current) setProofOpen(false); else if (onCloseRef.current) onCloseRef.current(); return }
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cutRef.current(true) }
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cutRef.current(true, 1) }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); cutRef.current(true, -1) }
     }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)

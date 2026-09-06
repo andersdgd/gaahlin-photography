@@ -1,4 +1,19 @@
-// Gaahlin Photography — Klippet.jsx (rummet, Arc 8 pass 8.1)
+// Gaahlin Photography — Klippet.jsx (rummet, Arc 8)
+// v0.3.0 — Helheten, enligt principen: subtilt, professionellt, fotografiet i fokus. Allt nytt är osynligt eller
+//   ger besökaren mer av bilden:
+//   • Tempo: klipparen sätter dwell per bild ur bildens täthet (tonalitetens spridning) och blick; besökarens egen
+//     takt (manuella klipp) styr filmen inom sessionen. Ingen profil, inget lagras.
+//   • Blicken (pass 8.2): "Låt porträtten se dig" uppe till höger — på besökarens ja körs MediaPipe FaceLandmarker
+//     lokalt på webbkameran (~15 fps, ingen bildruta lämnar enheten, inget lagras): porträttet håller så länge
+//     besökaren tittar, klipper när blicken lämnar (600 ms hysteres); lutar sig besökaren fram (ansiktsbox +20 %)
+//     kommer bilden närmare kring ögonen, tillbaka när hen lutar sig bakåt. Utan kamera: markör, finger, scroll.
+//     Kameran nekad eller modellen oladdad ⇒ ingenting sägs, rummet spelar som förut.
+//   • Närmare: håll finger eller musknapp på bilden → den kommer närmare kring ögonen (2×, ur filen som redan är
+//     laddad); släpp → tillbaka. Tapp = klipp, som förut. Djupzoomen i 60 MP (8.6) är fortsättningen på gesten.
+//   • Beviset på begäran: kapiteletiketten öppnar Content Credentials för bilden (lib/credentials.js: manifest
+//     lokalt, signaturverdikt via c2pa-js när det går). Stängs vid nästa klipp, Esc eller tapp utanför.
+//   • Wordmark "Gaahlin" uppe till vänster (hem); kapiteletiketten sitter på bildens skuggsida.
+//   ?debug=1 visar därtill kamera-/tempo-/närmare-tillstånd. Inga andra reglage. Pixlarna rörs aldrig.
 // v0.2.0 — Riktiga bilder. Poolen hämtas ur gaahlin.galleries/images (publika, i galleriordning; ?g=<slug> =
 //   ett galleri, RLS avgör) och bildintelligensen ur gaahlin.image_intelligence (migration 0007, räknad i
 //   adminens Analys): fokus = mitt mellan ögonen, direkt blick, ljusriktning/hårdhet, ansiktsboxens andel,
@@ -24,6 +39,8 @@
 
 import { Component, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
+import { loadLandmarker, parseFaces } from './lib/seeing'
+import { loadCredentials, describeCredentials } from './lib/credentials'
 
 const BUCKET = 'gaahlin-public'
 const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
@@ -66,16 +83,16 @@ const param = (k) => (typeof window !== 'undefined' ? new URLSearchParams(window
 // sc = ansiktsboxens andel av höjden (>0,30 = tätt), m = medelluminans (<0,25 = lågkey), h = ljusets hårdhet.
 // =============================================================================================
 const FIXTURES = [
-  { id: 1, s: 'I', r: .8, f: [.50, .36], d: 1, l: 180, sc: .55, m: .22, h: .9 },
-  { id: 2, s: 'I', r: .8, f: [.42, .40], d: 0, l: 170, sc: .25, m: .30, h: .6 },
-  { id: 3, s: 'I', r: 1.5, f: [.62, .38], d: 1, l: 160, sc: .20, m: .35, h: .7 },
-  { id: 4, s: 'II', r: 1, f: [.50, .42], d: 1, l: 0, sc: .60, m: .18, h: .95 },
-  { id: 5, s: 'II', r: .8, f: [.55, .34], d: 0, l: 20, sc: .35, m: .20, h: .7 },
-  { id: 6, s: 'II', r: 1.5, f: [.35, .45], d: 1, l: 10, sc: .15, m: .55, h: .5 },
-  { id: 7, s: 'III', r: .67, f: [.48, .30], d: 1, l: 190, sc: .45, m: .28, h: .85 },
-  { id: 8, s: 'III', r: 1.5, f: [.70, .40], d: 0, l: 175, sc: .22, m: .40, h: .6 },
-  { id: 9, s: 'III', r: .8, f: [.50, .38], d: 1, l: 5, sc: .50, m: .15, h: .9 },
-  { id: 10, s: 'III', r: 1, f: [.44, .44], d: 1, l: 90, sc: .30, m: .62, h: .4 },
+  { id: 1, s: 'I', r: .8, f: [.50, .36], d: 1, l: 180, sc: .55, m: .22, sd: 0.09, h: .9 },
+  { id: 2, s: 'I', r: .8, f: [.42, .40], d: 0, l: 170, sc: .25, m: .30, sd: 0.12, h: .6 },
+  { id: 3, s: 'I', r: 1.5, f: [.62, .38], d: 1, l: 160, sc: .20, m: .35, sd: 0.2, h: .7 },
+  { id: 4, s: 'II', r: 1, f: [.50, .42], d: 1, l: 0, sc: .60, m: .18, sd: 0.08, h: .95 },
+  { id: 5, s: 'II', r: .8, f: [.55, .34], d: 0, l: 20, sc: .35, m: .20, sd: 0.11, h: .7 },
+  { id: 6, s: 'II', r: 1.5, f: [.35, .45], d: 1, l: 10, sc: .15, m: .55, sd: 0.24, h: .5 },
+  { id: 7, s: 'III', r: .67, f: [.48, .30], d: 1, l: 190, sc: .45, m: .28, sd: 0.1, h: .85 },
+  { id: 8, s: 'III', r: 1.5, f: [.70, .40], d: 0, l: 175, sc: .22, m: .40, sd: 0.22, h: .6 },
+  { id: 9, s: 'III', r: .8, f: [.50, .38], d: 1, l: 5, sc: .50, m: .15, sd: 0.07, h: .9 },
+  { id: 10, s: 'III', r: 1, f: [.44, .44], d: 1, l: 90, sc: .30, m: .62, sd: 0.27, h: .4 },
 ]
 
 // =============================================================================================
@@ -83,12 +100,12 @@ const FIXTURES = [
 // Fält som klipparen läser: s (serie = galleri-slug), r (b/h), f (fokus 0..1), d (direkt blick),
 // l (ljusets vinkel), sc (ansiktsbox/höjd), m (medelluminans), h (hårdhet), e (embedding), url, title, intel.
 // =============================================================================================
-const NEUTRAL = { f: [0.5, 0.42], d: 0, l: 90, sc: 0, m: 0.5, h: 0.5 }
+const NEUTRAL = { f: [0.5, 0.42], d: 0, l: 90, sc: 0, m: 0.5, h: 0.5, sd: 0.15 }
 async function fetchPool(gSlug) {
   if (!supabase) throw new Error('Supabase-klienten saknas (env)')
   let q = supabase
     .from('galleries')
-    .select('id, slug, title, sort_order, images(id, storage_path, width, height, sort_order, is_public)')
+    .select('id, slug, title, sort_order, images(id, storage_path, width, height, sort_order, is_public, title)')
     .order('sort_order')
   q = gSlug ? q.eq('slug', gSlug) : q.eq('is_public', true)
   const g = await q
@@ -111,6 +128,8 @@ async function fetchPool(gSlug) {
         l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
         sc: face ? face.box[3] : NEUTRAL.sc,
         m: x && x.tonality && Number.isFinite(x.tonality.mean) ? x.tonality.mean : NEUTRAL.m,
+        sd: x && x.tonality && Number.isFinite(x.tonality.sd) ? x.tonality.sd : NEUTRAL.sd,
+        pw: w, ph: h, alt: (gal.title || '') + (im.title ? ' — ' + im.title : ''),
         h: x && x.light && Number.isFinite(x.light.hardness) ? x.light.hardness : NEUTRAL.h,
         e: x && Array.isArray(x.embedding) && x.embedding.length ? x.embedding : null,
         intel: !!x,
@@ -126,6 +145,20 @@ const similar = (A, B) => (A.e && B.e) ? cosine(A.e, B.e) > 0.85 : A.s === B.s
 const DWELL_DEFAULT = 3000
 const GLIDE_MS = 560
 const EASE = 'cubic-bezier(.2,.7,.2,1)'
+const CLOSER_MS = 600
+const CLOSER_HOLD = 2.0     // håll → närmare
+const CLOSER_LEAN = 1.5     // lutar sig fram (kamera) → närmare
+const HOLD_MS = 260         // tryck längre än så = håll, kortare = tapp
+const GAZE_HYST_MS = 600    // blicken måste ha lämnat/kommit i 600 ms innan rummet reagerar
+const GAZE_H = 22, GAZE_V = 22   // "tittar" = blicken inom ±22° från skärmens riktning (baslinje ur första sekunderna)
+const LEAN_IN = 1.20, LEAN_OUT = 1.08
+// Tempo: dwell per bild = bas × (0,8 + 2·sd, klämt 0,7–1,5) × (1,15 vid direkt blick) × besökarens takt (0,5–2).
+function dwellFor(p, base, tempo) {
+  const sd = Number.isFinite(p.sd) ? p.sd : 0.15
+  let f = Math.max(0.7, Math.min(1.5, 0.8 + 2 * sd))
+  if (p.d) f *= 1.15
+  return Math.round(base * f * tempo)
+}
 
 // =============================================================================================
 // Geometri — en bild i taget, "contain" på svart. Fokus i skärmkoordinater = vilorekt + f · storlek.
@@ -297,8 +330,21 @@ function Room() {
   const lastT = useRef(0)
   const lastCut = useRef(-1e9)     // -1e9: spärren får aldrig svälja det första klippet (0 skulle blockera sidans första 300 ms)
   const lastWheel = useRef(-1e9)
-  const touchY = useRef(null)
   const timer = useRef(null)
+  // Tempo: besökarens manuella klipp (intervall, EMA) styr filmen inom sessionen.
+  const tempoRef = useRef({ ema: 0, n: 0, last: 0 })
+  const [tempo, setTempo] = useState(1)
+  // Närmare: håll (pekare) eller luta sig fram (kamera).
+  const pointer = useRef({ down: false, t: 0, x: 0, y: 0, moved: false, held: false, timer: null })
+  const [closer, setCloser] = useState(0)          // 0 = vila, annars skalfaktor
+  // Blicken (kamera, opt-in, lokal).
+  const [cam, setCam] = useState('off')            // off | asking | on | denied | error | ended
+  const camRef = useRef({ stream: null, lm: null, loop: null, video: null, base: null, samples: [], lookState: false, since: 0, armed: false, lean: false, absentSince: 0, lastSeen: 0, info: '' })
+  const videoRef = useRef(null)
+  // Beviset på begäran.
+  const [proofOpen, setProofOpen] = useState(false)
+  const [proof, setProof] = useState(null)         // metadata för aktuell bild
+  const proofCache = useRef({})
 
   // Mät scenen (och håll den mätt vid resize/rotation).
   useLayoutEffect(() => {
@@ -350,7 +396,7 @@ function Room() {
     if (loaded.current.has(first.id)) { setCur(first); lastT.current = performance.now() }
   }, [cutter, loadedCount])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cut = () => {
+  const cut = (manual = false) => {
     const now = performance.now()
     if (now - lastCut.current < 300 || !cutter) return
     const seq = cutter.seq()
@@ -364,6 +410,13 @@ function Room() {
     pending.current = { A, B: res.B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y }
     lastT.current = now
     lastCut.current = now
+    if (manual) {   // besökarens takt: EMA av intervallen mellan manuella klipp
+      const t = tempoRef.current
+      if (t.last) { const iv = now - t.last; t.ema = t.n ? t.ema * 0.6 + iv * 0.4 : iv; t.n += 1; if (t.n >= 2) setTempo(Math.max(0.5, Math.min(2, t.ema / dwellMs))) }
+      t.last = now
+    }
+    setProofOpen(false)
+    setCloser(0)
     setCur(res.B)
     setTrace({ ...res, glide: Math.hypot(fa.x - fb.x, fa.y - fb.y) })
     setCutNo((n) => n + 1)
@@ -395,16 +448,28 @@ function Room() {
     })
   }, [cutNo])
 
-  // Filmen — dwell-styrd. Rörelse över bilden håller; en flik i bakgrunden pausar.
-  const schedule = () => { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), dwellMs) }
-  useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Filmen — dwell-styrd, med klipparens tempo. Rörelse över bilden håller; närmare håller; en besökare som
+  // tittar (kamera) håller; en flik i bakgrunden pausar.
+  const curRef = useRef(null); curRef.current = cur
+  const tempoRef2 = useRef(1); tempoRef2.current = tempo
+  const holdRef = useRef(false)   // sant medan blicken vilar på bilden eller närmare är aktivt
+  const schedule = () => {
+    clearTimeout(timer.current)
+    if (holdRef.current) return
+    const p = curRef.current
+    timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current) : dwellMs)
+  }
+  useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur, tempo])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const v = () => { if (document.hidden) clearTimeout(timer.current); else { lastT.current = performance.now(); schedule() } }
     document.addEventListener('visibilitychange', v)
     return () => document.removeEventListener('visibilitychange', v)
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const k = (e) => { if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cutRef.current() } }
+    const k = (e) => {
+      if (e.key === 'Escape') { setProofOpen(false); return }
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cutRef.current(true) }
+    }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [])
@@ -414,58 +479,188 @@ function Room() {
     const now = performance.now()
     if (now - lastWheel.current < 700) return
     lastWheel.current = now
-    cutRef.current()
+    cutRef.current(true)
   }
-  const onTouchStart = (e) => { touchY.current = e.touches[0]?.clientY ?? null }
-  const onTouchEnd = (e) => {
-    const y0 = touchY.current, y1 = e.changedTouches[0]?.clientY
-    touchY.current = null
-    if (y0 != null && y1 != null && y0 - y1 > 40) cutRef.current()
+  // Pekare: tapp = klipp, svep uppåt = klipp, håll = närmare (kring ögonen), släpp = tillbaka.
+  const setHold = (on) => { holdRef.current = on; if (on) clearTimeout(timer.current); else schedule() }
+  const onPointerDown = (e) => {
+    if (e.button && e.button !== 0) return
+    const p = pointer.current
+    p.down = true; p.t = performance.now(); p.x = e.clientX; p.y = e.clientY; p.moved = false; p.held = false
+    clearTimeout(p.timer)
+    p.timer = setTimeout(() => { if (p.down && !p.moved) { p.held = true; setCloser(CLOSER_HOLD); setHold(true) } }, HOLD_MS)
   }
+  const onPointerMove = (e) => {
+    schedule()
+    const p = pointer.current
+    if (p.down && !p.held && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12) p.moved = true
+  }
+  const onPointerUp = (e) => {
+    const p = pointer.current
+    if (!p.down) return
+    p.down = false
+    clearTimeout(p.timer)
+    if (p.held) { p.held = false; setCloser(camRef.current.lean ? CLOSER_LEAN : 0); setHold(camRef.current.lookState); return }
+    const dy = p.y - e.clientY
+    if (dy > 40) { cutRef.current(true); return }
+    if (!p.moved && performance.now() - p.t < HOLD_MS + 200) cutRef.current(true)
+  }
+  const onPointerCancel = () => { const p = pointer.current; p.down = false; clearTimeout(p.timer); if (p.held) { p.held = false; setCloser(0); setHold(camRef.current.lookState) } }
+
+  // Blicken — kameran på besökarens ja. Allt lokalt: bildrutorna går från <video> till modellen och ingenstans.
+  const startCamera = async () => {
+    if (cam !== 'off') return
+    setCam('asking')
+    const c = camRef.current
+    try {
+      const md = typeof navigator !== 'undefined' && navigator.mediaDevices
+      if (!md || !md.getUserMedia) throw new Error('ingen kamera-API')
+      c.stream = await md.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
+      const v = videoRef.current
+      if (!v) throw new Error('video saknas')
+      v.srcObject = c.stream
+      await v.play()
+      c.video = v
+      const r = await loadLandmarker({ mode: 'VIDEO', numFaces: 1, onStatus: (t) => { c.info = t } })
+      c.lm = r.lm
+      c.info = 'ser · ' + r.delegate
+      c.base = null; c.samples = []; c.lookState = false; c.since = 0; c.armed = false; c.lean = false; c.absentSince = 0; c.lastSeen = performance.now()
+      setCam('on')
+      const step = () => {
+        if (!c.lm || !c.video || c.video.readyState < 2) { c.loop = setTimeout(step, 66); return }
+        const now = performance.now()
+        let face = null
+        try { face = parseFaces(c.lm.detectForVideo(c.video, now))[0] || null } catch (e) { caught.push('kamera: ' + (e.message || e)) }
+        if (!face) {
+          if (!c.absentSince) c.absentSince = now
+          if (c.lookState && now - c.absentSince > GAZE_HYST_MS) { c.lookState = false; c.since = now; holdRef.current = false; schedule() }
+          if (c.lean) { c.lean = false; setCloser(0) }
+          c.info = 'ser ingen'
+        } else {
+          c.absentSince = 0; c.lastSeen = now
+          const size = face.box[3], dir = face.gaze.dir
+          if (!c.base) { c.samples.push({ p: dir[1], s: size }); if (c.samples.length >= 20) { const ps = c.samples.map((x) => x.p).sort((a, b) => a - b), ss = c.samples.map((x) => x.s).sort((a, b) => a - b); c.base = { pitch: ps[ps.length >> 1], size: ss[ss.length >> 1] } } }
+          const base = c.base || { pitch: dir[1], size }
+          const lookingNow = Math.abs(dir[0]) < GAZE_H && Math.abs(dir[1] - base.pitch) < GAZE_V
+          if (lookingNow !== c.lookState) {
+            if (!c.since) c.since = now
+            if (now - c.since > GAZE_HYST_MS) {
+              c.lookState = lookingNow; c.since = 0
+              if (lookingNow) { c.armed = true; holdRef.current = true; clearTimeout(timer.current) }
+              else { holdRef.current = false; if (c.armed) { c.armed = false; cutRef.current(false) } else schedule() }
+            }
+          } else c.since = 0
+          const ratio = size / (base.size || size)
+          if (!c.lean && ratio > LEAN_IN) { c.lean = true; if (!pointer.current.held) setCloser(CLOSER_LEAN) }
+          else if (c.lean && ratio < LEAN_OUT) { c.lean = false; if (!pointer.current.held) setCloser(0) }
+          c.info = `${c.lookState ? 'tittar' : 'tittar inte'} · blick ${dir[0]}/${Math.round(dir[1] - base.pitch)} · avstånd ${ratio.toFixed(2)}${c.lean ? ' · närmare' : ''}`
+        }
+        c.loop = setTimeout(step, 66)
+      }
+      step()
+    } catch (e) {
+      caught.push('kamera: ' + (e.message || e))
+      try { c.stream && c.stream.getTracks().forEach((t) => t.stop()) } catch (e2) { /* tyst */ }
+      c.stream = null
+      setCam(/NotAllowed|Permission|denied/i.test(String(e && e.name || e)) ? 'denied' : 'error')
+    }
+  }
+  useEffect(() => () => { const c = camRef.current; clearTimeout(c.loop); try { c.stream && c.stream.getTracks().forEach((t) => t.stop()) } catch (e) { /* tyst */ } }, [])
+
+  // Beviset på begäran — etiketten öppnar Content Credentials för aktuell bild.
+  const toggleProof = (e) => {
+    e.stopPropagation()
+    if (!cur || !cur.url) return
+    if (proofOpen) { setProofOpen(false); return }
+    setProofOpen(true)
+    const cached = proofCache.current[cur.uid]
+    if (cached) { setProof(cached); return }
+    setProof({ state: 'loading' })
+    const uid = cur.uid
+    loadCredentials(cur.url, (m) => { proofCache.current[uid] = m; if (curRef.current && curRef.current.uid === uid) setProof(m) })
+      .catch((err) => { const m = { state: 'error', reason: String(err && err.message || err) }; proofCache.current[uid] = m; if (curRef.current && curRef.current.uid === uid) setProof(m) })
+  }
+  useEffect(() => { if (cur && proofOpen) setProof(proofCache.current[cur.uid] || null) }, [cur])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const { W, H } = size
   const r = cur && W ? layout(cur, W, H) : null
   const f = cur && W ? focusAt(cur, W, H) : null
   const mono = { fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.6, color: '#9a9a9a' }
+  // Etiketten på skuggsidan: kommer ljuset från vänster (90°–270°) är skuggan till höger.
+  const labelSide = cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
 
   return (
     <div
       ref={stageRef}
-      onClick={() => cutRef.current()}
-      onPointerMove={schedule}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onWheel={onWheel}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
     >
       {cur && r && (
         <div ref={printRef} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, willChange: 'transform' }}>
           {cur.url
-            ? <img key={cur.id} src={cur.url} alt="" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
-            : <Print key={cur.id} p={cur} />}
+            ? <img key={cur.id} src={cur.url} alt={cur.alt || ''} draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }} />
+            : <div style={{ width: '100%', height: '100%', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}><Print key={cur.id} p={cur} /></div>}
         </div>
+      )}
+      <a href="/" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 18, top: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 19, letterSpacing: '.02em', color: '#8a8a8a', textDecoration: 'none' }}>Gaahlin</a>
+      {cam === 'off' && cur && cur.url && (
+        <button type="button" onClick={(e) => { e.stopPropagation(); startCamera() }} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
+          style={{ position: 'absolute', right: 18, top: 16, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, letterSpacing: '.1em', color: '#6a6a6a', cursor: 'pointer' }}>
+          Låt porträtten se dig
+        </button>
       )}
       {cur && (
-        <div style={{ position: 'absolute', left: 18, bottom: 16, fontSize: 12, letterSpacing: '.1em', color: '#7a7a7a', pointerEvents: 'none' }}>
+        <button type="button" onClick={toggleProof} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} aria-expanded={proofOpen}
+          style={{ position: 'absolute', bottom: 16, [labelSide]: 18, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, letterSpacing: '.1em', color: proofOpen ? '#cfcfcf' : '#7a7a7a', cursor: cur.url ? 'pointer' : 'default', textAlign: labelSide === 'right' ? 'right' : 'left' }}>
           {cur.title || `Serie ${cur.s}`}{debug ? ` · ${cur.uid ? 'bild' : 'print'} ${cur.id}${cur.intel === false ? ' · oanalyserad' : ''}` : ''}
-        </div>
+        </button>
       )}
+      {proofOpen && cur && cur.url && (() => {
+        const d = describeCredentials(proof, cur.pw && cur.ph ? { w: cur.pw, h: cur.ph } : null)
+        const dt = { fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: '#6f6f6f', margin: '10px 0 2px' }
+        const dd = { margin: 0, color: '#bdbdbd', fontSize: 12, lineHeight: 1.5 }
+        return (
+          <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 44, [labelSide]: 18, width: 'min(78vw, 380px)', padding: '12px 14px', background: 'rgba(0,0,0,.72)', border: '1px solid #1e1e1e', borderRadius: 4, fontSize: 12, color: '#bdbdbd' }}>
+            <div style={{ color: d.credState === 'verified' ? '#e6c98a' : '#cfcfcf', fontSize: 12, letterSpacing: '.08em' }}>{d.credText}</div>
+            {proof && proof.state === 'error' && <div style={{ ...dd, color: '#9a9a9a' }}>{proof.reason}</div>}
+            {d.active && (
+              <dl style={{ margin: 0 }}>
+                <dt style={dt}>Skapare</dt><dd style={dd}>{d.active.creator || 'inte angiven'}</dd>
+                <dt style={dt}>Signerat av</dt><dd style={dd}>{d.active.generator || 'okänt verktyg'}{d.active.spec ? ` (C2PA ${d.active.spec})` : ''}{d.active.timestamped ? ', tidsstämplat' : d.active.signed ? ', utan tidsstämpel' : ''}</dd>
+                <dt style={dt}>Verifiering</dt><dd style={dd}>{d.verifyText}</dd>
+                <dt style={dt}>Åtgärder</dt><dd style={dd}>{d.active.actions && d.active.actions.length ? `${d.active.actions.length}: ${d.summaryText}` : 'inga registrerade'}</dd>
+                <dt style={dt}>Generativ AI</dt><dd style={dd}>{d.active.generative ? 'registrerad i kedjan' : 'ingen registrerad'}</dd>
+                <dt style={dt}>Kedja</dt><dd style={dd}>{d.chainText}</dd>
+              </dl>
+            )}
+            {d.exifText && <><div style={dt}>Kamera (EXIF, osignerat)</div><div style={dd}>{d.exifText}</div></>}
+            {d.imageText && <><div style={dt}>Bild</div><div style={dd}>{d.imageText}</div></>}
+          </div>
+        )
+      })()}
+      <video ref={videoRef} playsInline muted autoPlay style={{ position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />
       {debug && f && (
         <div ref={ringRef} style={{ position: 'absolute', left: f.x, top: f.y, width: 26, height: 26, margin: '-13px 0 0 -13px', border: '1.5px solid #fff', borderRadius: '50%', opacity: .85, pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', left: 11, top: 11, width: 2, height: 2, background: '#fff', borderRadius: '50%' }} />
         </div>
       )}
       {debug && !cur && (
-        <div style={{ position: 'absolute', left: 14, top: 12, ...mono }}>{pool ? `väntar på öppningsbilden · pool ${source} · ${loadedCount}/${pool.length} laddade` : 'hämtar poolen …'}{caught.length ? '\n' + caught.join('\n') : ''}</div>
+        <div style={{ position: 'absolute', left: 14, top: 40, ...mono }}>{pool ? `väntar på öppningsbilden · pool ${source} · ${loadedCount}/${pool.length} laddade` : 'hämtar poolen …'}{caught.length ? '\n' + caught.join('\n') : ''}</div>
       )}
       {debug && cur && (
-        <div style={{ position: 'absolute', left: 14, top: 12, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
+        <div style={{ position: 'absolute', left: 14, top: 40, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
           <div>
             {`klipp ${cutNo} · ${cur.uid ? 'bild' : 'print'} ${cur.id} · ${cur.s}` +
               (trace ? ` · glid ${Math.round(trace.glide)} px · ${reduced ? 0 : GLIDE_MS} ms` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
           <div>{`pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade`}</div>
+          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo)} ms · närmare ${closer || '–'} · kamera ${cam}${camRef.current.info ? ' · ' + camRef.current.info : ''}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
           {trace && <div>{'förkastade: ' + trace.rejected.map((x) => `print ${x.B.id} (${x.s < -50 ? x.why : x.s.toFixed(1) + (x.why ? ': ' + x.why : '')})`).join(', ')}</div>}
@@ -473,7 +668,7 @@ function Room() {
         </div>
       )}
       {debug && (
-        <div style={{ position: 'absolute', right: 14, bottom: 16, ...mono }}>
+        <div style={{ position: 'absolute', right: 14, bottom: 40, ...mono }}>
           <a href="/obscura/scen" style={{ color: '#9a9a9a' }}>scen</a> · <a href="/spegeln" style={{ color: '#9a9a9a' }}>spegeln</a> · <a href="/" style={{ color: '#9a9a9a' }}>stäng</a>
         </div>
       )}

@@ -1,4 +1,8 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.14.0 — Arc 8 pass 8.1: ny sektion "Analys" — bildintelligens räknad i adminens webbläsare
+//   (CORS-sond → MediaPipe FaceLandmarker från CDN → ögon/blick/pose, tonalitet, ljusriktning, fokus,
+//   lum8-embedding) och sparad som siffror i gaahlin.image_intelligence (migration 0007). Utläsning per
+//   bild: miniatyr med ögonpunkter, fokus, ansiktsbox och ljusriktning. Rummet på /obscura läser siffrorna.
 // v0.13.0 — Ny sektion "Innehåll": redigera sajtens redaktionella text per språk (SV/NO/DK/FI/EN)
 //   + hero-/om-mig-bild + Instagram-länk. Schema/defaults i lib/siteContent.js, lagring i
 //   gaahlin.site_content (migration 0006). Tomt fält = sajtens standardtext används.
@@ -63,6 +67,7 @@ const ui = {
 
 const SECTIONS = [
   { id: 'bilder', label: 'Bilder & gallerier' },
+  { id: 'analys', label: 'Analys' },
   { id: 'innehall', label: 'Innehåll' },
   { id: 'kontakter', label: 'Kontakter' },
   { id: 'bokningar', label: 'Bokningar' },
@@ -273,9 +278,411 @@ export default function AdminApp() {
         {section === 'kontakter' && <Kontakter />}
         {section === 'bokningar' && <Bookings />}
         {section === 'bilder' && <GalleryManager />}
+        {section === 'analys' && <Analys />}
         {section === 'innehall' && <SiteContentEditor />}
         {section === 'kunder' && <ClientManager />}
       </main>
+    </div>
+  )
+}
+
+/* ---------------- Analys (Arc 8, pass 8.1 — "Rummet ser bilderna") ---------------- */
+// Bildintelligens räknad HÄR, i adminens webbläsare, aldrig i besökarens: MediaPipe FaceLandmarker
+// (478 punkter, iris 468/473) ger ögon, blick och pose; luminansmått ger tonalitet, ljusriktning,
+// fokus-fallback och en liten strukturell embedding ('lum8'). Resultatet är siffror i
+// gaahlin.image_intelligence (migration 0007); rummet på /obscura läser bara siffror. Pixlarna rörs aldrig.
+// Konstanterna bär datum (Lag 7) — CDN-sökvägar och modellversioner rör sig.
+const MP_VERSION = '0.10.14'   // verifierad 2026-09-06: paketroten via jsDelivr ger namngivna exporter (dev.to 2026-04-30; docs 2026-05-28)
+const MP_MODULES = [
+  `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`,
+  `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/+esm`,
+]
+const MP_WASM = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
+const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+const INTEL_VERSION = 1
+const ANALYSIS_MAX = 1280   // långsida (px) som modellen får se; landmarks är normaliserade så originalet är referensen
+const r3 = (v) => Math.round(v * 1000) / 1000
+const r4 = (v) => Math.round(v * 10000) / 10000
+
+function loadImageCors(url) {
+  return new Promise((resolve, reject) => {
+    const im = new Image()
+    im.crossOrigin = 'anonymous'
+    im.onload = () => resolve(im)
+    im.onerror = () => reject(new Error('Bilden kunde inte laddas med crossOrigin (CORS-huvud saknas eller 404): ' + url))
+    im.src = url
+  })
+}
+function toCanvas(img, max) {
+  const s = Math.min(1, max / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round((img.naturalWidth || 1) * s))
+  c.height = Math.max(1, Math.round((img.naturalHeight || 1) * s))
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+  return c
+}
+// 48×48 luminans (Rec. 709) + medelkroma. Rutnätet ignorerar bildens proportion — allt nedan räknar i
+// normaliserade koordinater (0..1), så ansiktsboxen från modellen mappar rakt in.
+function luminanceGrid(src, n = 48) {
+  const c = document.createElement('canvas')
+  c.width = n; c.height = n
+  const ctx = c.getContext('2d')
+  ctx.drawImage(src, 0, 0, n, n)
+  const d = ctx.getImageData(0, 0, n, n).data
+  const L = new Float32Array(n * n)
+  let chroma = 0
+  for (let i = 0; i < n * n; i++) {
+    const r = d[i * 4] / 255, g = d[i * 4 + 1] / 255, b = d[i * 4 + 2] / 255
+    L[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    chroma += Math.max(r, g, b) - Math.min(r, g, b)
+  }
+  return { L, n, chroma: chroma / (n * n) }
+}
+function tonalityOf(grid) {
+  const { L, chroma } = grid
+  const n = L.length
+  let s = 0
+  for (let i = 0; i < n; i++) s += L[i]
+  const mean = s / n
+  let v2 = 0
+  for (let i = 0; i < n; i++) v2 += (L[i] - mean) ** 2
+  const sd = Math.sqrt(v2 / n)
+  const sorted = Array.from(L).sort((a, b) => a - b)
+  const p = (q) => sorted[Math.min(n - 1, Math.floor(q * n))]
+  return { mean: r3(mean), sd: r3(sd), contrast: r3(p(.95) - p(.05)), key: mean < .25 ? 'low' : mean > .6 ? 'high' : 'mid', bw: chroma < .03 }
+}
+// Ljusriktning ur luminansgradienten i ansiktsboxen (utan ansikte: hela bilden).
+// angle: 0 = från höger, 90 = uppifrån, 180 = från vänster, 270 = underifrån. dir = [x, y (upp = +), z (frontalt)].
+function lightOf(grid, box) {
+  const { L, n } = grid
+  const [bx, by, bw, bh] = box || [0, 0, 1, 1]
+  const x0 = Math.max(0, Math.floor(bx * n)), y0 = Math.max(0, Math.floor(by * n))
+  const x1 = Math.min(n, Math.max(x0 + 1, Math.ceil((bx + bw) * n))), y1 = Math.min(n, Math.max(y0 + 1, Math.ceil((by + bh) * n)))
+  let l = 0, r = 0, t = 0, b = 0, nl = 0, nr = 0, nt = 0, nb = 0
+  const vals = []
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const v = L[y * n + x]
+    vals.push(v)
+    if (x < (x0 + x1) / 2) { l += v; nl++ } else { r += v; nr++ }
+    if (y < (y0 + y1) / 2) { t += v; nt++ } else { b += v; nb++ }
+  }
+  l /= nl || 1; r /= nr || 1; t /= nt || 1; b /= nb || 1
+  const dx = (r - l) / ((r + l) || 1), dy = (t - b) / ((t + b) || 1)
+  const angle = Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360)
+  vals.sort((p, q) => p - q)
+  const p = (q) => vals[Math.min(vals.length - 1, Math.floor(q * vals.length))]
+  const hardness = r3(Math.max(0, Math.min(1, (p(.9) - p(.1)) / 0.6)))
+  const dz = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy))
+  return { dir: [r3(dx), r3(dy), r3(dz)], angle, hardness }
+}
+function contrastCentroid(grid) {
+  const { L, n } = grid
+  let sx = 0, sy = 0, sw = 0
+  for (let y = 1; y < n - 1; y++) for (let x = 1; x < n - 1; x++) {
+    const g = Math.abs(L[y * n + x + 1] - L[y * n + x - 1]) + Math.abs(L[(y + 1) * n + x] - L[(y - 1) * n + x])
+    sx += x * g; sy += y * g; sw += g
+  }
+  return sw ? [r3(sx / sw / n), r3(sy / sw / n)] : [0.5, 0.5]
+}
+// 'lum8': 8×8 blockmedel av luminansen, centrerat och L2-normaliserat → cosinuslikhet i klienten.
+function lum8(grid) {
+  const { L, n } = grid
+  const k = n / 8
+  const out = []
+  for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) {
+    let s = 0, c = 0
+    for (let y = by * k; y < (by + 1) * k; y++) for (let x = bx * k; x < (bx + 1) * k; x++) { s += L[y * n + x]; c++ }
+    out.push(s / c)
+  }
+  const mean = out.reduce((a, b) => a + b, 0) / out.length
+  let norm = 0
+  const v = out.map((x) => { const d = x - mean; norm += d * d; return d })
+  norm = Math.sqrt(norm) || 1
+  return v.map((d) => r4(d / norm))
+}
+// MediaPipe-index: höger öga (personens) 33/133 hörn, 159/145 lock; vänster 263/362, 386/374; iris 468/473.
+// Vi lagrar bildens vänstra/högra öga (sorterat på x) — det är skärmen rummet klipper på.
+const LM = { a: { outer: 33, inner: 133, top: 159, bot: 145 }, b: { outer: 263, inner: 362, top: 386, bot: 374 }, iris: [468, 473] }
+function parseFaces(res) {
+  const faces = []
+  const lms = (res && res.faceLandmarks) || []
+  for (let i = 0; i < lms.length; i++) {
+    const pts = lms[i]
+    if (!pts || pts.length < 400) continue
+    let minx = 1, miny = 1, maxx = 0, maxy = 0
+    for (const p of pts) { if (p.x < minx) minx = p.x; if (p.y < miny) miny = p.y; if (p.x > maxx) maxx = p.x; if (p.y > maxy) maxy = p.y }
+    const box = [r3(minx), r3(miny), r3(maxx - minx), r3(maxy - miny)]
+    const eye = (sp) => {
+      const c1 = pts[sp.outer], c2 = pts[sp.inner], t = pts[sp.top], b = pts[sp.bot]
+      const cx = (c1.x + c2.x) / 2, cy = (c1.y + c2.y) / 2
+      const w = Math.abs(c1.x - c2.x) || 1e-6, h = Math.abs(t.y - b.y) || 1e-6
+      const iris = LM.iris.map((k) => pts[k]).filter(Boolean)
+        .sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy))[0] || { x: cx, y: cy }
+      return { c: [iris.x, iris.y], off: [(iris.x - cx) / w, (iris.y - cy) / h] }
+    }
+    const e1 = eye(LM.a), e2 = eye(LM.b)
+    const [Le, Re] = e1.c[0] <= e2.c[0] ? [e1, e2] : [e2, e1]
+    const off = [(Le.off[0] + Re.off[0]) / 2, (Le.off[1] + Re.off[1]) / 2]
+    // Direkt blick = iris centrerad i ögonöppningen (ögonen på objektivet). Huvudet får vara vridet —
+    // det är så de starkaste porträtten ser ut. Posen lagras separat (matrisens konvention oprövad — visas "ca").
+    const direct = Math.abs(off[0]) < 0.18 && Math.abs(off[1]) < 0.35
+    let pose = null
+    const m = res.facialTransformationMatrixes && res.facialTransformationMatrixes[i] && res.facialTransformationMatrixes[i].data
+    if (m && m.length >= 12) {
+      const R = (r, c) => m[c * 4 + r]
+      const yaw = Math.asin(Math.max(-1, Math.min(1, R(0, 2))))
+      const pitch = Math.atan2(-R(1, 2), R(2, 2))
+      const roll = Math.atan2(-R(0, 1), R(0, 0))
+      pose = [yaw, pitch, roll].map((a) => Math.round((a * 180) / Math.PI) || 0)   // || 0: aldrig -0
+    }
+    faces.push({ box, eyes: { l: Le.c.map(r3), r: Re.c.map(r3) }, gaze: { direct, offset: off.map(r3) }, pose, score: 1 })
+  }
+  faces.sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])
+  return faces
+}
+async function loadLandmarker(setStatus) {
+  let mod = null, used = ''
+  for (const url of MP_MODULES) {
+    try {
+      setStatus('Laddar MediaPipe ' + MP_VERSION + ' från ' + url + ' …')
+      const m = await import(/* @vite-ignore */ url)
+      if (m && m.FaceLandmarker && m.FilesetResolver) { mod = m; used = url; break }
+    } catch (e) { /* prova nästa */ }
+  }
+  if (!mod) throw new Error('MediaPipe kunde inte laddas från CDN (' + MP_MODULES.join(' / ') + ')')
+  setStatus('Hämtar wasm + modell (face_landmarker, ~3 MB) …')
+  const vision = await mod.FilesetResolver.forVisionTasks(MP_WASM)
+  const opts = (delegate) => ({
+    baseOptions: { modelAssetPath: MP_MODEL, delegate },
+    runningMode: 'IMAGE', numFaces: 4, outputFacialTransformationMatrixes: true, outputFaceBlendshapes: false,
+  })
+  let lm, delegate = 'GPU'
+  try { lm = await mod.FaceLandmarker.createFromOptions(vision, opts('GPU')) }
+  catch (e) { delegate = 'CPU'; lm = await mod.FaceLandmarker.createFromOptions(vision, opts('CPU')) }
+  return { lm, delegate, used }
+}
+function analyzeCanvas(c, landmarker) {
+  const grid = luminanceGrid(c)
+  let faces = []
+  if (landmarker) faces = parseFaces(landmarker.detect(c))
+  const main = faces[0]
+  const focus = main ? [r3((main.eyes.l[0] + main.eyes.r[0]) / 2), r3((main.eyes.l[1] + main.eyes.r[1]) / 2)] : contrastCentroid(grid)
+  return { faces, focus, tonality: tonalityOf(grid), light: lightOf(grid, main ? main.box : null), embedding: lum8(grid) }
+}
+function describeIntel(x) {
+  if (!x) return ''
+  const f = x.faces && x.faces[0]
+  const parts = []
+  parts.push(x.faces && x.faces.length ? `${x.faces.length} ansikte${x.faces.length > 1 ? 'n' : ''}` : 'inget ansikte — fokus = kontrast-tyngdpunkt')
+  if (f) parts.push(`blick ${f.gaze.direct ? 'direkt' : 'avvänd'} (offset ${f.gaze.offset[0]}, ${f.gaze.offset[1]})` + (f.pose ? ` · pose ca yaw ${f.pose[0]}° pitch ${f.pose[1]}°` : '') + ` · ansiktsbox ${Math.round(f.box[3] * 100)} % av höjden`)
+  if (x.light) parts.push(`ljus ${x.light.angle}° hårdhet ${x.light.hardness}`)
+  if (x.tonality) parts.push(`ton medel ${x.tonality.mean} sd ${x.tonality.sd} ${x.tonality.key === 'low' ? 'lågkey' : x.tonality.key === 'high' ? 'högkey' : 'mellan'}${x.tonality.bw ? ' svartvitt' : ''}`)
+  return parts.join(' · ')
+}
+
+// Utläsning: miniatyr med ögonpunkter, fokus, ansiktsbox och ljusriktning ritade ovanpå.
+function Readout({ url, intel, width = 260 }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const cv = ref.current
+    if (!cv || !intel) return
+    let alive = true
+    const im = new Image()
+    im.crossOrigin = 'anonymous'
+    im.onload = () => {
+      if (!alive) return
+      const w = width, h = Math.max(1, Math.round((im.naturalHeight / im.naturalWidth) * w))
+      cv.width = w; cv.height = h
+      const ctx = cv.getContext('2d')
+      ctx.drawImage(im, 0, 0, w, h)
+      ctx.lineWidth = 1.5
+      for (const f of intel.faces || []) {
+        ctx.strokeStyle = 'rgba(255,255,255,.55)'
+        ctx.strokeRect(f.box[0] * w, f.box[1] * h, f.box[2] * w, f.box[3] * h)
+        for (const e of [f.eyes.l, f.eyes.r]) {
+          ctx.beginPath(); ctx.arc(e[0] * w, e[1] * h, 5, 0, Math.PI * 2)
+          ctx.strokeStyle = f.gaze.direct ? '#ffd166' : '#fff'; ctx.stroke()
+        }
+      }
+      if (intel.focus) {
+        const [fx, fy] = [intel.focus[0] * w, intel.focus[1] * h]
+        ctx.strokeStyle = '#ffd166'
+        ctx.beginPath(); ctx.moveTo(fx - 9, fy); ctx.lineTo(fx + 9, fy); ctx.moveTo(fx, fy - 9); ctx.lineTo(fx, fy + 9); ctx.stroke()
+      }
+      if (intel.light) {
+        const a = (intel.light.angle * Math.PI) / 180
+        const f = intel.faces && intel.faces[0]
+        const cx = f ? (f.box[0] + f.box[2] / 2) * w : w / 2, cy = f ? (f.box[1] + f.box[3] / 2) * h : h / 2
+        const len = 34
+        ctx.strokeStyle = 'rgba(255,209,102,.9)'
+        ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * len, cy - Math.sin(a) * len); ctx.lineTo(cx, cy); ctx.stroke()
+      }
+    }
+    im.src = url
+    return () => { alive = false }
+  }, [url, intel, width])
+  return <canvas ref={ref} style={{ display: 'block', width, borderRadius: '4px', background: '#000' }} />
+}
+
+function Analys() {
+  const [rows, setRows] = useState(null)      // [{ image, gallery }] alla bilder, galleriordning
+  const [intel, setIntel] = useState({})      // image_id -> rad
+  const [probe, setProbe] = useState({ state: 'idle', text: '' })
+  const [model, setModel] = useState({ state: 'idle', text: '' })
+  const lmRef = useRef(null)
+  const [busyId, setBusyId] = useState(null)
+  const [busyAll, setBusyAll] = useState(false)
+  const [error, setError] = useState('')
+  const [log, setLog] = useState({})          // image_id -> text/fel per bild
+
+  const load = async () => {
+    const g = await supabase.from('galleries').select('id, slug, title, sort_order, is_public, images(id, storage_path, width, height, sort_order, is_public, title)').order('sort_order')
+    if (g.error) { setError(g.error.message); return }
+    const list = []
+    for (const gal of g.data || []) {
+      const ims = (gal.images || []).slice().sort((a, b) => a.sort_order - b.sort_order)
+      for (const im of ims) if (im.storage_path) list.push({ image: im, gallery: gal })
+    }
+    setRows(list)
+    const ii = await supabase.from('image_intelligence').select('image_id, version, faces, focus, tonality, light, embedding, models, analyzed_at')
+    if (ii.error) { setError(ii.error.message); return }
+    const map = {}
+    for (const r of ii.data || []) map[r.image_id] = r
+    setIntel(map)
+  }
+  useEffect(() => { load() }, [])
+
+  // CORS-sonden — allt nedan förutsätter att den är grön.
+  const runProbe = async (list) => {
+    const first = (list || rows || [])[0]
+    if (!first) { setProbe({ state: 'red', text: 'Inga bilder att sondera.' }); return false }
+    setProbe({ state: 'busy', text: 'Laddar ' + first.image.storage_path + ' med crossOrigin …' })
+    try {
+      const im = await loadImageCors(publicUrl(first.image.storage_path))
+      const c = document.createElement('canvas'); c.width = 2; c.height = 2
+      const ctx = c.getContext('2d'); ctx.drawImage(im, 0, 0, 2, 2)
+      const px = ctx.getImageData(0, 0, 1, 1).data
+      setProbe({ state: 'green', text: `CORS OK — pixel läst ur Storage (rgb ${px[0]},${px[1]},${px[2]}; ${im.naturalWidth}×${im.naturalHeight}).` })
+      return true
+    } catch (e) {
+      setProbe({ state: 'red', text: 'CORS RÖD — ' + (e.message || e) + '. Lös Storage-CORS innan analys.' })
+      return false
+    }
+  }
+  useEffect(() => { if (rows && rows.length && probe.state === 'idle') runProbe(rows) }, [rows])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ensureModel = async () => {
+    if (lmRef.current) return lmRef.current
+    setModel({ state: 'busy', text: 'Laddar …' })
+    const t0 = performance.now()
+    try {
+      const r = await loadLandmarker((t) => setModel({ state: 'busy', text: t }))
+      lmRef.current = r.lm
+      setModel({ state: 'green', text: `MediaPipe ${MP_VERSION} laddad (${r.delegate}, ${((performance.now() - t0) / 1000).toFixed(1)} s) från ${r.used}` })
+      return r.lm
+    } catch (e) {
+      setModel({ state: 'red', text: 'Modellen kunde inte laddas: ' + (e.message || e) })
+      throw e
+    }
+  }
+
+  const analyzeOne = async (row) => {
+    const im = await loadImageCors(publicUrl(row.image.storage_path))
+    const lm = await ensureModel()
+    const c = toCanvas(im, ANALYSIS_MAX)
+    const t0 = performance.now()
+    const out = analyzeCanvas(c, lm)
+    const ms = Math.round(performance.now() - t0)
+    const rec = {
+      image_id: row.image.id, version: INTEL_VERSION,
+      faces: out.faces, focus: out.focus, tonality: out.tonality, light: out.light, embedding: out.embedding,
+      models: { face: `mediapipe tasks-vision ${MP_VERSION} · face_landmarker float16/1`, embedding: 'lum8', app: 'AdminApp v0.14.0', analysis_px: ANALYSIS_MAX },
+      analyzed_at: new Date().toISOString(),
+    }
+    const { error } = await supabase.from('image_intelligence').upsert(rec, { onConflict: 'image_id' })
+    if (error) throw new Error('Sparning nekad: ' + error.message)
+    setIntel((m) => ({ ...m, [row.image.id]: rec }))
+    setLog((l) => ({ ...l, [row.image.id]: `${describeIntel(rec)} · ${ms} ms` }))
+  }
+  const analyze = async (row) => {
+    if (busyId || busyAll) return
+    setBusyId(row.image.id); setError('')
+    try { await analyzeOne(row) }
+    catch (e) { setLog((l) => ({ ...l, [row.image.id]: 'Fel: ' + (e.message || e) })) }
+    setBusyId(null)
+  }
+  const analyzeAll = async () => {
+    if (busyId || busyAll || !rows) return
+    setBusyAll(true); setError('')
+    for (const row of rows) {
+      setBusyId(row.image.id)
+      try { await analyzeOne(row) }
+      catch (e) { setLog((l) => ({ ...l, [row.image.id]: 'Fel: ' + (e.message || e) })) }
+    }
+    setBusyId(null); setBusyAll(false)
+  }
+
+  const dot = (state) => ({ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', marginRight: 8, verticalAlign: 'middle', background: state === 'green' ? '#5fbf6f' : state === 'red' ? '#d9534f' : state === 'busy' ? '#e0b34a' : '#444' })
+  const analyzedCount = rows ? rows.filter((r) => intel[r.image.id]).length : 0
+
+  return (
+    <div>
+      <h2 style={{ ...ui.serif, fontWeight: 400, fontSize: '24px', margin: '0 0 6px' }}>Analys</h2>
+      <p style={{ ...ui.muted, fontSize: '13px', margin: '0 0 18px', maxWidth: 720 }}>
+        Rummet ser bilderna. Analysen körs här i din webbläsare (modeller från CDN, inga nycklar, inget skickas) och sparar
+        siffror per bild — ögon, blick, ljusriktning, tonalitet — som <code>/obscura</code> klipper på. Fotografierna rörs aldrig.
+      </p>
+      {error && <p style={ui.err}>{error}</p>}
+
+      <div style={{ ...ui.editBox, marginBottom: 12 }}>
+        <span style={ui.label}>1 · CORS-sond (Storage → canvas)</span>
+        <div style={{ fontSize: '13px' }}><span style={dot(probe.state)} />{probe.text || 'Väntar på bildlistan …'}
+          <button style={{ ...ui.ghost, marginLeft: 12, padding: '4px 10px' }} onClick={() => runProbe()} disabled={probe.state === 'busy'}>Kör igen</button>
+        </div>
+      </div>
+      <div style={{ ...ui.editBox, marginBottom: 12 }}>
+        <span style={ui.label}>2 · Modell</span>
+        <div style={{ fontSize: '13px', wordBreak: 'break-all' }}><span style={dot(model.state)} />{model.text || 'Laddas vid första analysen (~3 MB, cachas av webbläsaren).'}
+          {model.state !== 'green' && <button style={{ ...ui.ghost, marginLeft: 12, padding: '4px 10px' }} onClick={() => ensureModel().catch(() => {})} disabled={model.state === 'busy'}>Ladda nu</button>}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0 10px' }}>
+        <span style={{ ...ui.label, margin: 0 }}>3 · Bilder — {rows ? `${analyzedCount} av ${rows.length} analyserade` : 'laddar …'}</span>
+        <button style={ui.ghost} onClick={analyzeAll} disabled={!rows || !rows.length || busyAll || !!busyId || probe.state !== 'green'}>
+          {busyAll ? 'Analyserar …' : 'Analysera alla'}
+        </button>
+      </div>
+      {rows && rows.length === 0 && <p style={ui.muted}>Inga bilder i gallerierna.</p>}
+      {rows && rows.map((row) => {
+        const x = intel[row.image.id]
+        const busy = busyId === row.image.id
+        const url = publicUrl(row.image.storage_path)
+        return (
+          <div key={row.image.id} style={{ ...ui.editBox, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            <div style={{ width: 260, flex: 'none' }}>
+              {x ? <Readout url={url} intel={x} /> : <img src={url} alt="" style={{ display: 'block', width: 260, borderRadius: 4, background: '#000' }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '13px' }}>
+              <div style={{ marginBottom: 6 }}>
+                <span style={{ color: '#fff' }}>{row.gallery.title}</span>
+                <span style={ui.muted}> · {row.image.width}×{row.image.height}{row.image.is_public && row.gallery.is_public ? '' : ' · dold'}</span>
+              </div>
+              <div style={{ ...ui.muted, marginBottom: 8 }}>
+                {x ? `Analyserad ${new Date(x.analyzed_at).toLocaleString('sv-SE')} · v${x.version}` : 'Inte analyserad — rummet klipper på bildcentrum tills dess.'}
+              </div>
+              {(log[row.image.id] || x) && (
+                <div style={{ color: (log[row.image.id] || '').startsWith('Fel') ? '#e0a0a0' : '#ccc', lineHeight: 1.5, marginBottom: 8 }}>
+                  {log[row.image.id] || describeIntel(x)}
+                </div>
+              )}
+              <button style={ui.ghost} onClick={() => analyze(row)} disabled={busy || busyAll || probe.state !== 'green'}>
+                {busy ? 'Analyserar …' : x ? 'Analysera igen' : 'Analysera'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

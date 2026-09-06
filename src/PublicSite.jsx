@@ -1,4 +1,8 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.9.0 — Redaktionellt innehåll från databasen (gaahlin.site_content) via lib/siteContent.js:
+//   hero-bild/etikett/stad/år, manifest, om mig (bild, tre stycken, signatur), kontaktrubrik/
+//   underrad, Instagram-länk. Allt med fallback till DEFAULTS — sajten renderar identiskt
+//   om tabellen är tom. UI-strängar (nav, formulär, "Stäng") ligger kvar i `langs` här.
 // v0.8.1 — Spamskydd på kontaktformuläret, utan externa tjänster:
 //   1) Honeypot: osynligt fält "website" som bara bottar fyller i.
 //   2) Tidskrav: minst 4 s mellan första fokus i formuläret och submit.
@@ -21,6 +25,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './index.css'
 import { supabase } from './lib/supabase'
+import { fetchSiteContent, resolveContent, publicImageUrl } from './lib/siteContent'
 
 // === Galleri-layout: justerade rader ===
 // Antal bilder per rad beror på viewport (speglar brytpunkterna i index.css).
@@ -115,75 +120,45 @@ const langs = {
   sv: {
     label: 'SV', name: 'Svenska',
     nav_work: 'Arbeten', nav_about: 'Om mig', nav_contact: 'Kontakt',
-    hero_genre: 'Porträtt', scroll: 'Scrolla',
+    scroll: 'Scrolla',
     label_statement: 'Manifest', label_work: 'Utvalda Arbeten', label_series: 'Serie',
     label_about: 'Om mig', label_contact: 'Kontakt',
-    statement_text: 'Fotografi är för mig där kreativitet, instinkt och precision möts — bilder som bevarar känsla, atmosfär och identitet.',
-    about_p1: 'Fotografi är för mig där kreativitet, instinkt och precision möts.',
-    about_p2: 'Bilder gör mer än att dokumentera ett ögonblick. De bevarar känsla, atmosfär och identitet.',
-    about_p3: 'Kunder väljer mig för fotografier som känns personliga, distinkta och varaktiga.',
-    contact_heading: 'Arbeta\nmed mig',
-    contact_sub: 'Öppen för porträttuppdrag,\neditorial och personliga projekt.',
     form_name: 'Namn', form_email: 'E-post', form_message: 'Meddelande', form_send: 'Skicka meddelande',
     close: 'Stäng', sent: 'Meddelande skickat — tack.', error: 'Något gick fel.',
   },
   no: {
     label: 'NO', name: 'Norsk',
     nav_work: 'Arbeider', nav_about: 'Om meg', nav_contact: 'Kontakt',
-    hero_genre: 'Portrett', scroll: 'Rull',
+    scroll: 'Rull',
     label_statement: 'Manifest', label_work: 'Utvalgte Arbeider', label_series: 'Serie',
     label_about: 'Om meg', label_contact: 'Kontakt',
-    statement_text: 'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',
-    about_p1: 'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',
-    about_p2: 'Bilder gjør mer enn å dokumentere et øyeblikk.',
-    about_p3: 'Kunder velger meg for fotografier som føles personlige og varige.',
-    contact_heading: 'Jobb\nmed meg',
-    contact_sub: 'Åpen for portrettoppdrag\nog personlige prosjekter.',
     form_name: 'Navn', form_email: 'E-post', form_message: 'Melding', form_send: 'Send melding',
     close: 'Lukk', sent: 'Melding sendt — takk.', error: 'Noe gikk galt.',
   },
   dk: {
     label: 'DK', name: 'Dansk',
     nav_work: 'Arbejder', nav_about: 'Om mig', nav_contact: 'Kontakt',
-    hero_genre: 'Portræt', scroll: 'Rul',
+    scroll: 'Rul',
     label_statement: 'Manifest', label_work: 'Udvalgte Arbejder', label_series: 'Serie',
     label_about: 'Om mig', label_contact: 'Kontakt',
-    statement_text: 'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',
-    about_p1: 'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',
-    about_p2: 'Billeder gør mere end at dokumentere et øjeblik.',
-    about_p3: 'Kunder vælger mig for fotografier, der føles personlige og varige.',
-    contact_heading: 'Arbejd\nmed mig',
-    contact_sub: 'Åben for portrætopgaver\nog personlige projekter.',
     form_name: 'Navn', form_email: 'E-mail', form_message: 'Besked', form_send: 'Send besked',
     close: 'Luk', sent: 'Besked sendt — tak.', error: 'Noget gik galt.',
   },
   fi: {
     label: 'FI', name: 'Suomi',
     nav_work: 'Työt', nav_about: 'Minusta', nav_contact: 'Yhteystiedot',
-    hero_genre: 'Muotokuva', scroll: 'Vieritä',
+    scroll: 'Vieritä',
     label_statement: 'Manifesti', label_work: 'Valitut Työt', label_series: 'Sarja',
     label_about: 'Minusta', label_contact: 'Yhteystiedot',
-    statement_text: 'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',
-    about_p1: 'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',
-    about_p2: 'Kuvat tekevät enemmän kuin dokumentoivat hetken.',
-    about_p3: 'Asiakkaat valitsevat minut henkilökohtaisista valokuvista.',
-    contact_heading: 'Tee töitä\nkanssani',
-    contact_sub: 'Avoin muotokuvatöille\nja henkilökohtaisille projekteille.',
     form_name: 'Nimi', form_email: 'Sähköposti', form_message: 'Viesti', form_send: 'Lähetä viesti',
     close: 'Sulje', sent: 'Viesti lähetetty — kiitos.', error: 'Jokin meni pieleen.',
   },
   en: {
     label: 'EN', name: 'English',
     nav_work: 'Work', nav_about: 'About', nav_contact: 'Contact',
-    hero_genre: 'Portrait', scroll: 'Scroll',
+    scroll: 'Scroll',
     label_statement: 'Statement', label_work: 'Selected Work', label_series: 'Series',
     label_about: 'About', label_contact: 'Contact',
-    statement_text: 'Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.',
-    about_p1: 'Photography, for me, is where creativity, instinct, and precision meet.',
-    about_p2: 'Images do more than document a moment. They preserve feeling, atmosphere, and identity.',
-    about_p3: 'Clients choose me for photographs that feel personal, distinctive, and lasting.',
-    contact_heading: 'Work\nwith me',
-    contact_sub: 'Open for portrait commissions,\neditorial, and personal projects.',
     form_name: 'Name', form_email: 'Email', form_message: 'Message', form_send: 'Send message',
     close: 'Close', sent: 'Message sent — thank you.', error: 'Something went wrong.',
   },
@@ -212,7 +187,9 @@ export default function PublicSite() {
   const [imgVisible, setImgVisible] = useState(false)
   const [submitNote, setSubmitNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const formFirstFocusRef = useRef(0)   // spamskydd: när besökaren först rörde formuläret
+  const formFirstFocusRef = useRef(0)
+  const [siteDb, setSiteDb] = useState({})   // redaktionellt innehåll ur gaahlin.site_content
+  const c = resolveContent(siteDb, currentLang)   // spamskydd: när besökaren först rörde formuläret
   const [galleries, setGalleries] = useState([])
   const cols = useColumns()   // [{...galleri, images:[{...bild, url, flatIndex}]}]
   const [photos, setPhotos] = useState([])         // platt lista av bild-URL:er (för lightbox)
@@ -266,6 +243,13 @@ export default function PublicSite() {
       setPhotos(flat)
       flat.slice(0, 2).forEach((src) => { const im = new Image(); im.src = src })
     })()
+    return () => { active = false }
+  }, [])
+
+  // Redaktionellt innehåll (text + bildplatser). Fel ⇒ tomt ⇒ DEFAULTS.
+  useEffect(() => {
+    let active = true
+    fetchSiteContent().then((db) => { if (active) setSiteDb(db) })
     return () => { active = false }
   }, [])
 
@@ -516,7 +500,7 @@ export default function PublicSite() {
         <img
           ref={heroImgRef}
           className="hero-img"
-          src="/images/intro/me_bw.jpg"
+          src={c.hero_image ? publicImageUrl(c.hero_image) : '/images/intro/me_bw.jpg'}
           alt="Gaahlin Photography"
           fetchPriority="high"
           decoding="sync"
@@ -524,9 +508,9 @@ export default function PublicSite() {
         <div className="hero-overlay"></div>
         <div className="hero-bottom">
           <div className="hero-meta">
-            <p>{t.hero_genre}</p>
-            <p>Stockholm</p>
-            <p>2026</p>
+            <p>{c.hero_genre}</p>
+            <p>{c.hero_city}</p>
+            <p>{c.hero_year}</p>
           </div>
         </div>
         <div className="hero-scroll">
@@ -537,7 +521,7 @@ export default function PublicSite() {
 
       <section id="statement">
         <p className="section-label reveal">{t.label_statement}</p>
-        <p className="intro-text reveal reveal-delay-1">{t.statement_text}</p>
+        <p className="intro-text reveal reveal-delay-1">{c.statement_text}</p>
       </section>
 
       <section id="gallery">
@@ -588,26 +572,26 @@ export default function PublicSite() {
 
       <section id="about">
         <div className="about-image reveal">
-          <img src="/images/about/me.jpg" alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async" />
+          <img src={c.about_image ? publicImageUrl(c.about_image) : '/images/about/me.jpg'} alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async" />
         </div>
         <div className="about-content">
           <p className="section-label reveal">{t.label_about}</p>
           <h2 className="reveal reveal-delay-1">Anders Gåhlin<br />Dufberg</h2>
-          <p className="reveal reveal-delay-2">{t.about_p1}</p>
-          <p className="reveal reveal-delay-3">{t.about_p2}</p>
-          <p className="reveal">{t.about_p3}</p>
-          <div className="about-sig reveal">Anders</div>
+          <p className="reveal reveal-delay-2">{c.about_p1}</p>
+          <p className="reveal reveal-delay-3">{c.about_p2}</p>
+          <p className="reveal">{c.about_p3}</p>
+          <div className="about-sig reveal">{c.about_sig}</div>
         </div>
       </section>
 
       <section id="contact">
         <div className="contact-intro">
           <p className="section-label reveal">{t.label_contact}</p>
-          <h2 className="reveal reveal-delay-1">{renderLines(t.contact_heading)}</h2>
-          <p className="reveal reveal-delay-2">{renderLines(t.contact_sub)}</p>
+          <h2 className="reveal reveal-delay-1">{renderLines(c.contact_heading)}</h2>
+          <p className="reveal reveal-delay-2">{renderLines(c.contact_sub)}</p>
           <div className="contact-links reveal reveal-delay-3">
             <a
-              href="https://www.instagram.com/gaahlinphotography/"
+              href={c.instagram_url}
               className="contact-link"
               target="_blank"
               rel="noopener noreferrer"

@@ -1,4 +1,14 @@
 /* Gaahlin Photography — global stylesheet
+   v0.6.0 — INGA FILTER PÅ FOTOGRAFIERNA (Anders 2026-09-06: "varje bild är matt i färgen … jag vill att den
+   alltid är samma färg som originalbilden"). Galleriindexet renderade varje bild genom
+   filter:grayscale(20%) brightness(.9) och tände den till grayscale(0%) brightness(1.02) vid hover — alltså var
+   VARKEN läget originalet: viloläget dämpat, hover-läget 2 % för ljust. Mätt på en hudton (214,178,152) blev
+   viloläget (187,161,143) och en specular (246,242,238) blev (221,218,215): 25 nivåer av spegling borta, precis
+   det som ska bevaras. Filtret är borttaget ur båda lägena. Hover behåller sin skala 1,04 — affordansen ligger i
+   rörelsen, inte i exponeringen. Samma fel fanns på .about-image img (grayscale(15%) brightness(.85)) och är
+   borttaget där. Den döda STRIP-CSS:en (#featured/.featured-strip/.strip-item — renderas inte i någon JSX)
+   bar ett tredje filter, grayscale(10%), som hade vaknat den dag remsan återinförs; hela blocket är borttaget,
+   det ligger i git-historiken. Stående regel skriven i MASTER §6: ingen CSS-filter ändrar ett fotografi.
    v0.5.1 — .hp-field: honeypottens maskering flyttad hit ur PublicSite.jsx (se den filens v0.11.1).
    Positioneringen bor här, fältet där — ihop är de en nätfiskesignatur, isär är de två oskyldiga rader.
    v0.5.0 — hero-bilden tillbaka och glider in (PublicSite v0.11.0): .hero-img startar på opacity 0 och
@@ -98,22 +108,14 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(0,0,0,.95);backdrop-filter:blur
 .gallery-grid{display:flex;flex-direction:column;align-items:center;gap:4px}
 .gallery-row{display:flex;align-items:flex-start;gap:4px;width:100%}
 .gallery-item{flex:1 1 0;min-width:0;overflow:hidden;position:relative;cursor:pointer;background:#111}
-.gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .7s cubic-bezier(.25,.46,.45,.94),filter .5s;filter:grayscale(20%) brightness(.9)}
-.gallery-item:hover img{transform:scale(1.04);filter:grayscale(0%) brightness(1.02)}
+.gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .7s cubic-bezier(.25,.46,.45,.94)}
+.gallery-item:hover img{transform:scale(1.04)}
 
-/* STRIP */
-#featured{padding:4rem 0;border-top:1px solid rgba(255,255,255,.06)}
-#featured .section-label{padding-left:3rem;margin-bottom:2rem}
-.featured-strip{display:flex;gap:4px;overflow-x:auto;padding:0 3rem 1rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.featured-strip::-webkit-scrollbar{display:none}
-.strip-item{flex:0 0 260px;height:360px;overflow:hidden;cursor:pointer}
-.strip-item img{width:100%;height:100%;object-fit:cover;transition:transform .6s;filter:grayscale(10%)}
-.strip-item:hover img{transform:scale(1.05)}
 
 /* ABOUT */
 #about{display:grid;grid-template-columns:1fr 1fr;min-height:80vh;border-top:1px solid rgba(255,255,255,.06)}
 .about-image{overflow:hidden}
-.about-image img{width:100%;height:100%;object-fit:cover;filter:grayscale(15%) brightness(.85)}
+.about-image img{width:100%;height:100%;object-fit:cover}
 .about-content{padding:6rem 4rem;display:flex;flex-direction:column;justify-content:center;background:#0d0d0d}
 .about-content h2{font-family:'Cormorant Garamond',serif;font-size:clamp(1.8rem,2.8vw,3rem);font-weight:300;letter-spacing:.15em;text-transform:uppercase;margin-bottom:2.5rem;line-height:1.1;margin-top:1rem}
 .about-content p{font-size:12px;letter-spacing:.1em;line-height:2.2;color:rgba(255,255,255,.6);text-transform:uppercase;font-weight:300;margin-bottom:1.5rem;max-width:420px}
@@ -160,8 +162,6 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 nav{padding:1.2rem 1.5rem;padding-top:calc(1.2rem + env(safe-area-inset-top))}
 nav.scrolled{padding:.9rem 1.5rem}
 #gallery,#contact,#statement{padding-left:1.5rem;padding-right:1.5rem}
-#featured .section-label{padding-left:1.5rem}
-.featured-strip{padding-left:1.5rem}
 .about-content{padding:3rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }

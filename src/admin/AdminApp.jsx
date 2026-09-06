@@ -1,4 +1,8 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.14.1 — Analys, två rotfel ur första körningen på riktiga bilder (2026-09-06): (1) blick = huvudets vridning
+//   (ur meshens z) + ögonens vridning mot objektivet — iris centrerad i ett vridet huvud är inte direkt blick;
+//   (2) ansikten söks i tre steg (1280 px → nivålyft kopia → 2048 px) med lägre detektionströskel, och ljus/hårdhet
+//   utan ansikte mäts i ett fönster kring fokus i stället för på hela (svarta) ramen. INTEL_VERSION 2.
 // v0.14.0 — Arc 8 pass 8.1: ny sektion "Analys" — bildintelligens räknad i adminens webbläsare
 //   (CORS-sond → MediaPipe FaceLandmarker från CDN → ögon/blick/pose, tonalitet, ljusriktning, fokus,
 //   lum8-embedding) och sparad som siffror i gaahlin.image_intelligence (migration 0007). Utläsning per
@@ -299,7 +303,7 @@ const MP_MODULES = [
 ]
 const MP_WASM = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
 const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
-const INTEL_VERSION = 1
+const INTEL_VERSION = 2   // v2: blick = huvudets vridning + ögonens vridning mot objektivet; ansikten söks i tre steg
 const ANALYSIS_MAX = 1280   // långsida (px) som modellen får se; landmarks är normaliserade så originalet är referensen
 const r3 = (v) => Math.round(v * 1000) / 1000
 const r4 = (v) => Math.round(v * 10000) / 10000
@@ -375,6 +379,32 @@ function lightOf(grid, box) {
   const dz = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy))
   return { dir: [r3(dx), r3(dy), r3(dz)], angle, hardness }
 }
+// Utan ansikte: ljusriktning = vektorn från de mellanljusa partierna (skuggsidan) till de ljusaste (ljussidan) —
+// den pekar mot ljuset. Ett fönster kring kontrast-tyngdpunkten duger inte: tyngdpunkten ligger på den belysta
+// sidan, så fönstret delar mitt i ljuset (prövat 2026-09-06). Hårdhet = spridningen inom det som inte är bakgrund.
+function lightFromTones(grid) {
+  const { L, n } = grid
+  let max = 0
+  for (let i = 0; i < L.length; i++) if (L[i] > max) max = L[i]
+  const hiT = Math.max(0.05, 0.6 * max), midT = Math.max(0.02, 0.15 * max)
+  let hx = 0, hy = 0, hw = 0, mx = 0, my = 0, mw = 0
+  const vals = []
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const v = L[y * n + x]
+    if (v >= hiT) { hx += x * v; hy += y * v; hw += v; vals.push(v) }
+    else if (v >= midT) { mx += x * v; my += y * v; mw += v; vals.push(v) }
+  }
+  if (!hw || !mw) return lightOf(grid, null)
+  const dx = hx / hw - mx / mw, dyDown = hy / hw - my / mw
+  const len = Math.hypot(dx, dyDown) || 1e-6
+  const ux = dx / len, uy = -dyDown / len   // uy > 0 = ljus uppifrån
+  const angle = Math.round(((Math.atan2(uy, ux) * 180) / Math.PI + 360) % 360)
+  vals.sort((a, b) => a - b)
+  const p = (q) => vals[Math.min(vals.length - 1, Math.floor(q * vals.length))]
+  const hardness = r3(Math.max(0, Math.min(1, (p(.9) - p(.1)) / 0.6)))
+  const strength = Math.min(1, len / (n * 0.25))   // hur tydlig riktningen är (0 = ingen), lagras i dir.z-komplementet
+  return { dir: [r3(ux * strength), r3(uy * strength), r3(Math.sqrt(Math.max(0, 1 - strength * strength)))], angle, hardness }
+}
 function contrastCentroid(grid) {
   const { L, n } = grid
   let sx = 0, sy = 0, sw = 0
@@ -400,9 +430,21 @@ function lum8(grid) {
   norm = Math.sqrt(norm) || 1
   return v.map((d) => r4(d / norm))
 }
-// MediaPipe-index: höger öga (personens) 33/133 hörn, 159/145 lock; vänster 263/362, 386/374; iris 468/473.
-// Vi lagrar bildens vänstra/högra öga (sorterat på x) — det är skärmen rummet klipper på.
-const LM = { a: { outer: 33, inner: 133, top: 159, bot: 145 }, b: { outer: 263, inner: 362, top: 386, bot: 374 }, iris: [468, 473] }
+// MediaPipe-index: höger öga (personens) 33/133 hörn, 159/145 lock; vänster 263/362, 386/374; iris 468/473;
+// kinder 234/454, panna 10, haka 152. Vi lagrar bildens vänstra/högra (sorterat på x) — det är skärmen rummet klipper på.
+const LM = { a: { outer: 33, inner: 133, top: 159, bot: 145 }, b: { outer: 263, inner: 362, top: 386, bot: 374 }, iris: [468, 473], cheeks: [234, 454], brow: 10, chin: 152 }
+const EYE_DEG = 80        // grader ögonvridning per enhet irisoffset (iris i ögonvrån ≈ ±0,5 ≈ ±40°)
+const DIRECT_H = 12, DIRECT_V = 25   // blick mot objektivet: inom ±12° i sidled, ±25° i höjdled (lodrätt mått är grövre)
+// Huvudets vridning ur meshens djup (z ≈ samma skala som x, mindre = närmare kameran): är bildens högra kind
+// längre bort än den vänstra är huvudet vänt åt höger. Pitch ur panna/haka på samma sätt (+ = nedåt).
+function headPose(pts) {
+  const [c1, c2] = LM.cheeks.map((k) => pts[k])
+  const [L, R] = c1.x <= c2.x ? [c1, c2] : [c2, c1]
+  const yaw = (Math.atan2((R.z || 0) - (L.z || 0), Math.abs(R.x - L.x) || 1e-6) * 180) / Math.PI
+  const t = pts[LM.brow], c = pts[LM.chin]
+  const pitch = (Math.atan2((c.z || 0) - (t.z || 0), Math.abs(c.y - t.y) || 1e-6) * 180) / Math.PI
+  return [Math.round(yaw) || 0, Math.round(pitch) || 0]
+}
 function parseFaces(res) {
   const faces = []
   const lms = (res && res.faceLandmarks) || []
@@ -412,6 +454,7 @@ function parseFaces(res) {
     let minx = 1, miny = 1, maxx = 0, maxy = 0
     for (const p of pts) { if (p.x < minx) minx = p.x; if (p.y < miny) miny = p.y; if (p.x > maxx) maxx = p.x; if (p.y > maxy) maxy = p.y }
     const box = [r3(minx), r3(miny), r3(maxx - minx), r3(maxy - miny)]
+    if (box[3] < 0.03) continue   // för litet för att vara ett porträtt — sannolikt falskt utslag
     const eye = (sp) => {
       const c1 = pts[sp.outer], c2 = pts[sp.inner], t = pts[sp.top], b = pts[sp.bot]
       const cx = (c1.x + c2.x) / 2, cy = (c1.y + c2.y) / 2
@@ -423,9 +466,12 @@ function parseFaces(res) {
     const e1 = eye(LM.a), e2 = eye(LM.b)
     const [Le, Re] = e1.c[0] <= e2.c[0] ? [e1, e2] : [e2, e1]
     const off = [(Le.off[0] + Re.off[0]) / 2, (Le.off[1] + Re.off[1]) / 2]
-    // Direkt blick = iris centrerad i ögonöppningen (ögonen på objektivet). Huvudet får vara vridet —
-    // det är så de starkaste porträtten ser ut. Posen lagras separat (matrisens konvention oprövad — visas "ca").
-    const direct = Math.abs(off[0]) < 0.18 && Math.abs(off[1]) < 0.35
+    // Blick mot objektivet = huvudets vridning + ögonens vridning. Iris centrerad i ett vridet huvud tittar dit
+    // huvudet pekar, inte in i kameran (fyndet 2026-09-06: porträtt som tittar bort fick "direkt"). Huvudet får
+    // vara vridet så länge ögonen kompenserar — det är så de starkaste porträtten ser ut.
+    const head = headPose(pts)
+    const dir = [Math.round(head[0] + EYE_DEG * off[0]), Math.round(head[1] + EYE_DEG * off[1])]
+    const direct = Math.abs(dir[0]) < DIRECT_H && Math.abs(dir[1]) < DIRECT_V
     let pose = null
     const m = res.facialTransformationMatrixes && res.facialTransformationMatrixes[i] && res.facialTransformationMatrixes[i].data
     if (m && m.length >= 12) {
@@ -435,7 +481,7 @@ function parseFaces(res) {
       const roll = Math.atan2(-R(0, 1), R(0, 0))
       pose = [yaw, pitch, roll].map((a) => Math.round((a * 180) / Math.PI) || 0)   // || 0: aldrig -0
     }
-    faces.push({ box, eyes: { l: Le.c.map(r3), r: Re.c.map(r3) }, gaze: { direct, offset: off.map(r3) }, pose, score: 1 })
+    faces.push({ box, eyes: { l: Le.c.map(r3), r: Re.c.map(r3) }, gaze: { direct, offset: off.map(r3), head, dir }, pose, score: 1 })
   }
   faces.sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])
   return faces
@@ -455,26 +501,61 @@ async function loadLandmarker(setStatus) {
   const opts = (delegate) => ({
     baseOptions: { modelAssetPath: MP_MODEL, delegate },
     runningMode: 'IMAGE', numFaces: 4, outputFacialTransformationMatrixes: true, outputFaceBlendshapes: false,
+    minFaceDetectionConfidence: 0.3, minFacePresenceConfidence: 0.3,   // mörka, små ansikten (fyndet 2026-09-06)
   })
   let lm, delegate = 'GPU'
   try { lm = await mod.FaceLandmarker.createFromOptions(vision, opts('GPU')) }
   catch (e) { delegate = 'CPU'; lm = await mod.FaceLandmarker.createFromOptions(vision, opts('CPU')) }
   return { lm, delegate, used }
 }
-function analyzeCanvas(c, landmarker) {
+// Nivålyft för mörka ramar (analysens kopia, aldrig fotografiet): förstärkning så att 99,5-percentilen når ~0,85.
+function normalizedCopy(c) {
+  const w = c.width, h = c.height
+  const d = c.getContext('2d').getImageData(0, 0, w, h)
+  const px = d.data, hist = new Uint32Array(256), total = w * h
+  for (let i = 0; i < px.length; i += 4) hist[(px[i] * 54 + px[i + 1] * 183 + px[i + 2] * 19) >> 8]++
+  let acc = 0, p = 255
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= total * 0.995) { p = v; break } }
+  const gain = Math.min(8, Math.max(1.2, 217 / Math.max(1, p)))
+  for (let i = 0; i < px.length; i += 4) { px[i] = Math.min(255, px[i] * gain); px[i + 1] = Math.min(255, px[i + 1] * gain); px[i + 2] = Math.min(255, px[i + 2] * gain) }
+  const out = document.createElement('canvas'); out.width = w; out.height = h
+  out.getContext('2d').putImageData(d, 0, 0)
+  return { canvas: out, gain: Math.round(gain * 10) / 10 }
+}
+// Ansikten söks i tre steg: 1) 1280 px, 2) nivålyft kopia, 3) 2048 px. Landmarks är normaliserade 0..1 i alla
+// steg, så resultatet refererar originalet oavsett i vilket steg det hittades.
+function detectFaces(img, landmarker, c1) {
+  if (!landmarker) return { faces: [], tier: 'ingen modell' }
+  let faces = parseFaces(landmarker.detect(c1))
+  if (faces.length) return { faces, tier: '1280' }
+  const n = normalizedCopy(c1)
+  faces = parseFaces(landmarker.detect(n.canvas))
+  if (faces.length) return { faces, tier: 'nivålyft ×' + n.gain }
+  if (Math.max(img.naturalWidth, img.naturalHeight) > ANALYSIS_MAX) {
+    const c2 = toCanvas(img, 2048)
+    faces = parseFaces(landmarker.detect(c2))
+    if (faces.length) return { faces, tier: '2048' }
+    const n2 = normalizedCopy(c2)
+    faces = parseFaces(landmarker.detect(n2.canvas))
+    if (faces.length) return { faces, tier: '2048 nivålyft ×' + n2.gain }
+  }
+  return { faces: [], tier: 'inget i tre steg' }
+}
+function analyzeImage(img, landmarker) {
+  const c = toCanvas(img, ANALYSIS_MAX)
   const grid = luminanceGrid(c)
-  let faces = []
-  if (landmarker) faces = parseFaces(landmarker.detect(c))
-  const main = faces[0]
+  const det = detectFaces(img, landmarker, c)
+  const main = det.faces[0]
   const focus = main ? [r3((main.eyes.l[0] + main.eyes.r[0]) / 2), r3((main.eyes.l[1] + main.eyes.r[1]) / 2)] : contrastCentroid(grid)
-  return { faces, focus, tonality: tonalityOf(grid), light: lightOf(grid, main ? main.box : null), embedding: lum8(grid) }
+  return { faces: det.faces, tier: det.tier, focus, tonality: tonalityOf(grid), light: main ? lightOf(grid, main.box) : lightFromTones(grid), embedding: lum8(grid) }
 }
 function describeIntel(x) {
   if (!x) return ''
   const f = x.faces && x.faces[0]
   const parts = []
   parts.push(x.faces && x.faces.length ? `${x.faces.length} ansikte${x.faces.length > 1 ? 'n' : ''}` : 'inget ansikte — fokus = kontrast-tyngdpunkt')
-  if (f) parts.push(`blick ${f.gaze.direct ? 'direkt' : 'avvänd'} (offset ${f.gaze.offset[0]}, ${f.gaze.offset[1]})` + (f.pose ? ` · pose ca yaw ${f.pose[0]}° pitch ${f.pose[1]}°` : '') + ` · ansiktsbox ${Math.round(f.box[3] * 100)} % av höjden`)
+  if (f) parts.push(`blick ${f.gaze.direct ? 'direkt' : 'avvänd'}` + (f.gaze.head ? ` (huvud ${f.gaze.head[0]}°/${f.gaze.head[1]}°, ögon ${Math.round(EYE_DEG * f.gaze.offset[0])}°/${Math.round(EYE_DEG * f.gaze.offset[1])}° → ${f.gaze.dir[0]}°/${f.gaze.dir[1]}°)` : ` (offset ${f.gaze.offset[0]}, ${f.gaze.offset[1]})`) + ` · ansiktsbox ${Math.round(f.box[3] * 100)} % av höjden` + (x.tier && x.tier !== '1280' ? ` · hittat: ${x.tier}` : ''))
+  if (!f && x.tier && x.tier !== 'ingen modell') parts.push(`sökt: ${x.tier}`)
   if (x.light) parts.push(`ljus ${x.light.angle}° hårdhet ${x.light.hardness}`)
   if (x.tonality) parts.push(`ton medel ${x.tonality.mean} sd ${x.tonality.sd} ${x.tonality.key === 'low' ? 'lågkey' : x.tonality.key === 'high' ? 'högkey' : 'mellan'}${x.tonality.bw ? ' svartvitt' : ''}`)
   return parts.join(' · ')
@@ -589,20 +670,19 @@ function Analys() {
   const analyzeOne = async (row) => {
     const im = await loadImageCors(publicUrl(row.image.storage_path))
     const lm = await ensureModel()
-    const c = toCanvas(im, ANALYSIS_MAX)
     const t0 = performance.now()
-    const out = analyzeCanvas(c, lm)
+    const out = analyzeImage(im, lm)
     const ms = Math.round(performance.now() - t0)
     const rec = {
       image_id: row.image.id, version: INTEL_VERSION,
       faces: out.faces, focus: out.focus, tonality: out.tonality, light: out.light, embedding: out.embedding,
-      models: { face: `mediapipe tasks-vision ${MP_VERSION} · face_landmarker float16/1`, embedding: 'lum8', app: 'AdminApp v0.14.0', analysis_px: ANALYSIS_MAX },
+      models: { face: `mediapipe tasks-vision ${MP_VERSION} · face_landmarker float16/1`, gaze: 'head(z)+iris v2', tier: out.tier, embedding: 'lum8', app: 'AdminApp v0.14.1', analysis_px: ANALYSIS_MAX },
       analyzed_at: new Date().toISOString(),
     }
     const { error } = await supabase.from('image_intelligence').upsert(rec, { onConflict: 'image_id' })
     if (error) throw new Error('Sparning nekad: ' + error.message)
     setIntel((m) => ({ ...m, [row.image.id]: rec }))
-    setLog((l) => ({ ...l, [row.image.id]: `${describeIntel(rec)} · ${ms} ms` }))
+    setLog((l) => ({ ...l, [row.image.id]: `${describeIntel({ ...rec, tier: out.tier })} · ${ms} ms` }))
   }
   const analyze = async (row) => {
     if (busyId || busyAll) return

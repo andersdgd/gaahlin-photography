@@ -1,4 +1,6 @@
 /* Gaahlin Photography — global stylesheet
+   v0.5.1 — .hp-field: honeypottens maskering flyttad hit ur PublicSite.jsx (se den filens v0.11.1).
+   Positioneringen bor här, fältet där — ihop är de en nätfiskesignatur, isär är de två oskyldiga rader.
    v0.5.0 — hero-bilden tillbaka och glider in (PublicSite v0.11.0): .hero-img startar på opacity 0 och
    scale 1,035 och går till vila när klassen .settled sätts av bildens load — 1400 ms, cubic-bezier(.2,.7,.2,1),
    sajtens egen klippkurva. Skala, inte förskjutning: object-fit är contain, en translate hade blottat kanten.
@@ -140,6 +142,10 @@ nav.scrolled{padding:1.2rem 3rem;background:rgba(0,0,0,.95);backdrop-filter:blur
 /* FOOTER */
 footer{padding:2rem 3rem;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;background:#000}
 footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.25)}
+
+/* HONEYPOT — maskerar spamfältet i kontaktformuläret (PublicSite v0.11.1).
+   Inte display:none: vissa bottar hoppar över fält som är helt bortkopplade. */
+.hp-field{position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden}
 
 /* RESPONSIVE */
 @media(max-width:900px){

@@ -1,4 +1,10 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.10.0 — Rummet flyttar in (Arc 8). Hero = <Room mode="hero"> (Klippet.jsx): filmen med Anders porträtt,
+//   matchklipp på ögonen, hänglinje, dissolve för bilder med bakgrund; sajtens nav och hero-metan ligger ovanpå.
+//   Galleriet är indexet: tryck på en bild öppnar <Room mode="overlay"> på just den bilden, filmen fortsätter,
+//   Stäng/Esc/svep ner tar tillbaka till samma plats. Den gamla lightboxen är borttagen (state, effekter, JSX).
+//   Poolen (gallerier + bilder + intelligens) hämtas EN gång via fetchPool och ger både indexet och rummen.
+//   Hero-bilden ur site_content används inte längre i heron (Innehåll-sektionen behåller fältet tills vidare).
 // v0.9.0 — Redaktionellt innehåll från databasen (gaahlin.site_content) via lib/siteContent.js:
 //   hero-bild/etikett/stad/år, manifest, om mig (bild, tre stycken, signatur), kontaktrubrik/
 //   underrad, Instagram-länk. Allt med fallback till DEFAULTS — sajten renderar identiskt
@@ -26,6 +32,7 @@ import { useEffect, useRef, useState } from 'react'
 import './index.css'
 import { supabase } from './lib/supabase'
 import { fetchSiteContent, resolveContent, publicImageUrl } from './lib/siteContent'
+import { Room, RoomBoundary, fetchPool } from './Klippet'
 
 // === Galleri-layout: justerade rader ===
 // Antal bilder per rad beror på viewport (speglar brytpunkterna i index.css).
@@ -164,8 +171,6 @@ const langs = {
   },
 }
 
-const BUCKET = 'gaahlin-public'
-const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
 
 // Hjälpare: rendera text med \n som <br/>
 function renderLines(text) {
@@ -181,23 +186,20 @@ export default function PublicSite() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [currentLang, setCurrentLang] = useState('sv')
-  const [lightboxOpen, setLightboxOpen] = useState(false)
-  const [lightboxIdx, setLightboxIdx] = useState(0)
-  const [lightboxSrc, setLightboxSrc] = useState('')
-  const [imgVisible, setImgVisible] = useState(false)
+  const [pool, setPool] = useState(null)           // rummets pool: bilder + intelligens, hämtas en gång
+  const [roomOpen, setRoomOpen] = useState(false)  // rummet i helskärm ur galleriet
+  const [roomStart, setRoomStart] = useState(null) // bilden det öppnar på (uid)
   const [submitNote, setSubmitNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const formFirstFocusRef = useRef(0)
   const [siteDb, setSiteDb] = useState({})   // redaktionellt innehåll ur gaahlin.site_content
   const c = resolveContent(siteDb, currentLang)   // spamskydd: när besökaren först rörde formuläret
-  const [galleries, setGalleries] = useState([])
-  const cols = useColumns()   // [{...galleri, images:[{...bild, url, flatIndex}]}]
-  const [photos, setPhotos] = useState([])         // platt lista av bild-URL:er (för lightbox)
+  const [galleries, setGalleries] = useState([])   // [{...galleri, images:[{...bild, url, flatIndex, uid}]}]
+  const cols = useColumns()
 
   const heroImgRef = useRef(null)
   const heroSectionRef = useRef(null)
   const langSwitcherRef = useRef(null)
-  const touchStartRef = useRef(0)
 
   const t = langs[currentLang]
 
@@ -211,37 +213,22 @@ export default function PublicSite() {
     return () => clearTimeout(t1)
   }, [])
 
-  // Hämta publika gallerier + bilder (DB/Storage). RLS filtrerar redan publikt;
-  // vi filtrerar/ordnar defensivt och bygger en platt URL-lista för lightboxen.
+  // Poolen: publika gallerier + bilder + intelligens (fetchPool i Klippet.jsx), EN hämtning för index och rum.
+  // Indexet grupperar poolen per galleri i galleriordning.
   useEffect(() => {
     let active = true
     ;(async () => {
       if (!supabase) return
-      const { data, error } = await supabase
-        .from('galleries')
-        .select('id, slug, title, sort_order, images(storage_path, width, height, sort_order, is_public, title)')
-        .eq('is_public', true)
-        .order('sort_order')
+      let p = []
+      try { p = await fetchPool(null) } catch (e) { p = [] }
       if (!active) return
-      if (error || !data) { setGalleries([]); setPhotos([]); return }
-      const flat = []
-      const structured = data
-        .map((g) => {
-          const imgs = (g.images || [])
-            .filter((im) => im.is_public)
-            .sort((a, b) => a.sort_order - b.sort_order)
-            .map((im) => {
-              const url = publicUrl(im.storage_path)
-              const flatIndex = flat.length
-              flat.push(url)
-              return { ...im, url, flatIndex }
-            })
-          return { ...g, images: imgs }
-        })
-        .filter((g) => g.images.length > 0)
-      setGalleries(structured)
-      setPhotos(flat)
-      flat.slice(0, 2).forEach((src) => { const im = new Image(); im.src = src })
+      setPool(p)
+      const byG = new Map()
+      p.forEach((x, i) => {
+        if (!byG.has(x.gid)) byG.set(x.gid, { id: x.gid, slug: x.s, title: x.title, images: [] })
+        byG.get(x.gid).images.push({ uid: x.uid, url: x.url, width: x.pw, height: x.ph, title: x.imgTitle, flatIndex: i })
+      })
+      setGalleries([...byG.values()].filter((g) => g.images.length > 0))
     })()
     return () => { active = false }
   }, [])
@@ -258,7 +245,7 @@ export default function PublicSite() {
     document.documentElement.lang = currentLang
   }, [currentLang])
 
-  // Scroll: nav.scrolled + hero parallax/opacity
+  // Scroll: nav.scrolled + heron (rummet) tonas och krymper svagt när man scrollar förbi
   useEffect(() => {
     let ticking = false
     const onScroll = () => {
@@ -270,11 +257,7 @@ export default function PublicSite() {
         const progress = Math.min(y / h, 1)
         const img = heroImgRef.current
         if (img) {
-          if (window.innerWidth > 900) {
-            img.style.transform = `scale(${1 - progress * 0.08}) translateY(${y * 0.15}px)`
-          } else {
-            img.style.transform = `scale(${1 - progress * 0.06})`
-          }
+          img.style.transform = window.innerWidth > 900 ? `scale(${1 - progress * 0.06}) translateY(${y * 0.15}px)` : `scale(${1 - progress * 0.04})`
           img.style.opacity = String(1 - progress * 0.85)
         }
         setScrolled(y > 50)
@@ -323,41 +306,11 @@ export default function PublicSite() {
     return () => go.disconnect()
   }, [galleries])
 
-  // Body scroll lock: mobil meny ELLER lightbox öppen
+  // Body scroll lock: mobil meny ELLER rummet öppet
   useEffect(() => {
-    document.body.style.overflow = (mobileOpen || lightboxOpen) ? 'hidden' : ''
+    document.body.style.overflow = (mobileOpen || roomOpen) ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
-  }, [mobileOpen, lightboxOpen])
-
-  // Lightbox: tangentbord (Esc, pilar)
-  useEffect(() => {
-    if (!lightboxOpen) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') setLightboxOpen(false)
-      else if (e.key === 'ArrowRight') setLightboxIdx((i) => (i + 1) % photos.length)
-      else if (e.key === 'ArrowLeft') setLightboxIdx((i) => (i - 1 + photos.length) % photos.length)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [lightboxOpen])
-
-  // Lightbox: byt bild med 200ms fade och preload av grannar
-  useEffect(() => {
-    if (!lightboxOpen) {
-      setImgVisible(false)
-      return
-    }
-    setImgVisible(false)
-    // Preload grannarna
-    ;[1, -1].forEach((d) => {
-      const p = new Image()
-      p.src = photos[(lightboxIdx + d + photos.length) % photos.length]
-    })
-    const t1 = setTimeout(() => {
-      setLightboxSrc(photos[lightboxIdx])
-    }, 200)
-    return () => clearTimeout(t1)
-  }, [lightboxIdx, lightboxOpen])
+  }, [mobileOpen, roomOpen])
 
   // Stäng språkdropdown vid klick utanför
   useEffect(() => {
@@ -373,22 +326,9 @@ export default function PublicSite() {
 
   const closeMobile = () => setMobileOpen(false)
 
-  const openLightbox = (i) => {
-    setLightboxIdx(i)
-    setLightboxOpen(true)
-  }
-
-  const navigateLightbox = (d) => {
-    setLightboxIdx((i) => (i + d + photos.length) % photos.length)
-  }
-
-  const onLightboxTouchStart = (e) => {
-    touchStartRef.current = e.touches[0].clientX
-  }
-  const onLightboxTouchEnd = (e) => {
-    const delta = touchStartRef.current - e.changedTouches[0].clientX
-    if (Math.abs(delta) > 50) navigateLightbox(delta > 0 ? 1 : -1)
-  }
+  // Rummet ur galleriet: öppnar på bilden besökaren tryckte; stäng tar tillbaka till samma plats (ingen scroll rörs).
+  const openRoom = (uid) => { setRoomStart(uid); setRoomOpen(true) }
+  const closeRoom = () => setRoomOpen(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -497,23 +437,19 @@ export default function PublicSite() {
       </div>
 
       <section id="hero" ref={heroSectionRef}>
-        <img
-          ref={heroImgRef}
-          className="hero-img"
-          src={c.hero_image ? publicImageUrl(c.hero_image) : '/images/intro/me_bw.jpg'}
-          alt="Gaahlin Photography"
-          fetchPriority="high"
-          decoding="sync"
-        />
-        <div className="hero-overlay"></div>
-        <div className="hero-bottom">
+        <div ref={heroImgRef} style={{ position: 'absolute', inset: 0, willChange: 'transform, opacity' }}>
+          <RoomBoundary>
+            <Room mode="hero" pool={pool} active={!roomOpen} />
+          </RoomBoundary>
+        </div>
+        <div className="hero-bottom" style={{ pointerEvents: 'none' }}>
           <div className="hero-meta">
             <p>{c.hero_genre}</p>
             <p>{c.hero_city}</p>
             <p>{c.hero_year}</p>
           </div>
         </div>
-        <div className="hero-scroll">
+        <div className="hero-scroll" style={{ pointerEvents: 'none' }}>
           <span>{t.scroll}</span>
           <div className="scroll-arrow"></div>
         </div>
@@ -548,7 +484,7 @@ export default function PublicSite() {
                         className="gallery-item reveal"
                         style={{ flexGrow: ar, aspectRatio: String(ar) }}
                         {...(eager ? {} : { 'data-lazy': '1' })}
-                        onClick={() => openLightbox(img.flatIndex)}
+                        onClick={() => openRoom(img.uid)}
                       >
                         {eager ? (
                           <img src={img.url} alt={img.title || g.title} decoding="async" />
@@ -637,60 +573,11 @@ export default function PublicSite() {
         <p>Stockholm, Sweden</p>
       </footer>
 
-      <div
-        className={`lightbox ${lightboxOpen ? 'open' : ''}`}
-        onTouchStart={onLightboxTouchStart}
-        onTouchEnd={onLightboxTouchEnd}
-      >
-        <button
-          type="button"
-          className="lightbox-close"
-          onClick={() => setLightboxOpen(false)}
-        >
-          {t.close}
-        </button>
-        <button
-          type="button"
-          className="lb-arrow lb-arrow-left"
-          onClick={() => navigateLightbox(-1)}
-          aria-label="Föregående"
-        >
-          <svg viewBox="0 0 40 40">
-            <line x1="28" y1="20" x2="12" y2="20" />
-            <polyline points="19,13 12,20 19,27" />
-          </svg>
-        </button>
-        <div className="lightbox-img-wrap">
-          <img
-            id="lightboxImg"
-            className={imgVisible ? 'visible' : ''}
-            src={lightboxSrc}
-            alt=""
-            onLoad={() => setImgVisible(true)}
-          />
-        </div>
-        <button
-          type="button"
-          className="lb-arrow lb-arrow-right"
-          onClick={() => navigateLightbox(1)}
-          aria-label="Nästa"
-        >
-          <svg viewBox="0 0 40 40">
-            <line x1="12" y1="20" x2="28" y2="20" />
-            <polyline points="21,13 28,20 21,27" />
-          </svg>
-        </button>
-        <div className="lb-counter">
-          {photos.map((_, i) => (
-            <div
-              key={i}
-              className={`lb-dot ${i === lightboxIdx ? 'active' : ''}`}
-              onClick={() => setLightboxIdx(i)}
-            />
-          ))}
-        </div>
-        <div className="lb-info">{lightboxIdx + 1} / {photos.length}</div>
-      </div>
+      {roomOpen && (
+        <RoomBoundary>
+          <Room mode="overlay" pool={pool} startUid={roomStart} onClose={closeRoom} closeLabel={t.close} />
+        </RoomBoundary>
+      )}
     </div>
   )
 }

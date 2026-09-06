@@ -1,19 +1,19 @@
 // Gaahlin Photography — Klippet.jsx (rummet, Arc 8)
-// v0.3.0 — Helheten, enligt principen: subtilt, professionellt, fotografiet i fokus. Allt nytt är osynligt eller
-//   ger besökaren mer av bilden:
-//   • Tempo: klipparen sätter dwell per bild ur bildens täthet (tonalitetens spridning) och blick; besökarens egen
-//     takt (manuella klipp) styr filmen inom sessionen. Ingen profil, inget lagras.
-//   • Blicken (pass 8.2): "Låt porträtten se dig" uppe till höger — på besökarens ja körs MediaPipe FaceLandmarker
-//     lokalt på webbkameran (~15 fps, ingen bildruta lämnar enheten, inget lagras): porträttet håller så länge
-//     besökaren tittar, klipper när blicken lämnar (600 ms hysteres); lutar sig besökaren fram (ansiktsbox +20 %)
-//     kommer bilden närmare kring ögonen, tillbaka när hen lutar sig bakåt. Utan kamera: markör, finger, scroll.
-//     Kameran nekad eller modellen oladdad ⇒ ingenting sägs, rummet spelar som förut.
-//   • Närmare: håll finger eller musknapp på bilden → den kommer närmare kring ögonen (2×, ur filen som redan är
-//     laddad); släpp → tillbaka. Tapp = klipp, som förut. Djupzoomen i 60 MP (8.6) är fortsättningen på gesten.
-//   • Beviset på begäran: kapiteletiketten öppnar Content Credentials för bilden (lib/credentials.js: manifest
-//     lokalt, signaturverdikt via c2pa-js när det går). Stängs vid nästa klipp, Esc eller tapp utanför.
-//   • Wordmark "Gaahlin" uppe till vänster (hem); kapiteletiketten sitter på bildens skuggsida.
-//   ?debug=1 visar därtill kamera-/tempo-/närmare-tillstånd. Inga andra reglage. Pixlarna rörs aldrig.
+// v0.4.0 — Anders styrning 2026-09-06: kameran och allt kring "blick" är borttaget (blickbedömningen höll inte mot
+//   riktiga porträtt). I stället effekter ur det som ÄR bekräftat på hans bilder — ögonens läge, ansiktets storlek,
+//   ljusets riktning/hårdhet, tonalitet, fokuspunkt:
+//   • Hänglinjen: porträtt hänger med ögonen på samma höjd i rummet (42 % av höjden), som på en galleriväng;
+//     bilden får krympa högst 15 % för att nå linjen, annars närmast möjliga.
+//   • Det osynliga klippet: B börjar i den skala som gör ansiktet lika stort som A:s, med ögonen på A:s ögon,
+//     och drar sig sedan till sin viloskala på 600 ms — klippet syns inte, bilden förvandlas. Vidbilder (utan
+//     ansikte) öppnar 25 % närmare sin fokuspunkt och drar sig ut till hela ramen.
+//   • Andningen: under bildens tid en rörelse på 5 % kring ögonen, förskjuten mot ljuset — täta porträtt drar
+//     sig utåt, vida kommer närmare. Så långsam att den inte ses börja.
+//   • Kapitelandningen: 120 ms svart när galleriet byter.
+//   • Klipparen väljer på närvaro (ansiktets storlek × ljusets hårdhet) där den förut valde på blick.
+//   Kvar från v0.3.0: tempot, Närmare (håll → 2× kring ögonen), beviset bakom etiketten, wordmark, etiketten på
+//   skuggsidan, förladdning (inget klipp väntar), ?fixtur=1, ?debug=1, ?seed=<n>, ?dwell=<ms>.
+// v0.3.0 — Tempo, Blicken (kamera), Närmare, beviset, wordmark, etikett på skuggsidan. (Kameran borttagen i v0.4.0.)
 // v0.2.0 — Riktiga bilder. Poolen hämtas ur gaahlin.galleries/images (publika, i galleriordning; ?g=<slug> =
 //   ett galleri, RLS avgör) och bildintelligensen ur gaahlin.image_intelligence (migration 0007, räknad i
 //   adminens Analys): fokus = mitt mellan ögonen, direkt blick, ljusriktning/hårdhet, ansiktsboxens andel,
@@ -39,7 +39,6 @@
 
 import { Component, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { loadLandmarker, parseFaces } from './lib/seeing'
 import { loadCredentials, describeCredentials } from './lib/credentials'
 
 const BUCKET = 'gaahlin-public'
@@ -100,7 +99,7 @@ const FIXTURES = [
 // Fält som klipparen läser: s (serie = galleri-slug), r (b/h), f (fokus 0..1), d (direkt blick),
 // l (ljusets vinkel), sc (ansiktsbox/höjd), m (medelluminans), h (hårdhet), e (embedding), url, title, intel.
 // =============================================================================================
-const NEUTRAL = { f: [0.5, 0.42], d: 0, l: 90, sc: 0, m: 0.5, h: 0.5, sd: 0.15 }
+const NEUTRAL = { f: [0.5, 0.42], l: 90, sc: 0, m: 0.5, h: 0.5, sd: 0.15 }
 async function fetchPool(gSlug) {
   if (!supabase) throw new Error('Supabase-klienten saknas (env)')
   let q = supabase
@@ -124,7 +123,6 @@ async function fetchPool(gSlug) {
       pool.push({
         id: ++n, uid: im.id, s: gal.slug, title: gal.title, r: w / h, url: publicUrl(im.storage_path),
         f: (x && x.focus && x.focus.length === 2) ? x.focus : NEUTRAL.f,
-        d: face && face.gaze && face.gaze.direct ? 1 : 0,
         l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
         sc: face ? face.box[3] : NEUTRAL.sc,
         m: x && x.tonality && Number.isFinite(x.tonality.mean) ? x.tonality.mean : NEUTRAL.m,
@@ -138,6 +136,8 @@ async function fetchPool(gSlug) {
   }
   return pool
 }
+// Närvaro: ansiktets storlek i ramen × ljusets hårdhet — det klipparen väljer starkaste bild på.
+const presence = (p) => (p.sc > 0 ? p.sc * (0.5 + 0.5 * (Number.isFinite(p.h) ? p.h : 0.5)) : 0)
 const cosine = (a, b) => { let s = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i] * b[i]; return s }
 // Likhet för regel 7: embedding om båda har en, annars serie-släktskap.
 const similar = (A, B) => (A.e && B.e) ? cosine(A.e, B.e) > 0.85 : A.s === B.s
@@ -147,30 +147,45 @@ const GLIDE_MS = 560
 const EASE = 'cubic-bezier(.2,.7,.2,1)'
 const CLOSER_MS = 600
 const CLOSER_HOLD = 2.0     // håll → närmare
-const CLOSER_LEAN = 1.5     // lutar sig fram (kamera) → närmare
 const HOLD_MS = 260         // tryck längre än så = håll, kortare = tapp
-const GAZE_HYST_MS = 600    // blicken måste ha lämnat/kommit i 600 ms innan rummet reagerar
-const GAZE_H = 22, GAZE_V = 22   // "tittar" = blicken inom ±22° från skärmens riktning (baslinje ur första sekunderna)
-const LEAN_IN = 1.20, LEAN_OUT = 1.08
-// Tempo: dwell per bild = bas × (0,8 + 2·sd, klämt 0,7–1,5) × (1,15 vid direkt blick) × besökarens takt (0,5–2).
-function dwellFor(p, base, tempo) {
+const HANG = 0.42           // hänglinjen: ögonen på 42 % av scenens höjd
+const HANG_MIN = 0.85       // bilden får krympa högst så här mycket för att nå linjen
+const MATCH_MIN = 0.7, MATCH_MAX = 1.8   // skalmatchning vid klipp, klämd
+const PANO_IN = 1.25        // vidbild öppnar 25 % närmare fokus
+const BREATH = 0.05         // andningen: 5 % under bildens tid
+const CHAPTER_MS = 120      // kapitelandningen: svart vid gallerbyte
+// Tempo: dwell per bild = bas × (0,8 + 2·sd, klämt 0,7–1,5) × (1,15 vid stark närvaro) × besökarens takt (0,5–2).
+function dwellFor(p, base, tempo, maxP) {
   const sd = Number.isFinite(p.sd) ? p.sd : 0.15
   let f = Math.max(0.7, Math.min(1.5, 0.8 + 2 * sd))
-  if (p.d) f *= 1.15
+  if (maxP > 0 && presence(p) >= 0.6 * maxP) f *= 1.15
   return Math.round(base * f * tempo)
 }
 
 // =============================================================================================
 // Geometri — en bild i taget, "contain" på svart. Fokus i skärmkoordinater = vilorekt + f · storlek.
 // =============================================================================================
-function layout(p, W, H) {
+function contain(p, W, H) {
   let w = W, h = W / p.r
   if (h > H) { h = H; w = H * p.r }
   return { x: (W - w) / 2, y: (H - h) / 2, w, h }
 }
+// Vilorekt: bilder utan ansikte centreras; porträtt hänger med ögonen på hänglinjen. Bilden får krympa högst
+// (1 − HANG_MIN) för att nå linjen — räcker inte det läggs ögonen så nära linjen som ramen tillåter. Aldrig beskuren.
+function layout(p, W, H) {
+  const base = contain(p, W, H)
+  if (!(p.sc > 0) || !(p.f[1] > 0.02 && p.f[1] < 0.98)) return base
+  const hangY = HANG * H
+  const hMax = Math.min(hangY / p.f[1], (H - hangY) / (1 - p.f[1]))
+  let h = Math.min(base.h, hMax)
+  if (h < base.h * HANG_MIN) h = base.h * HANG_MIN
+  const w = h * p.r
+  const y = Math.max(0, Math.min(H - h, hangY - p.f[1] * h))
+  return { x: (W - w) / 2, y, w, h }
+}
 function focusAt(p, W, H) {
   const r = layout(p, W, H)
-  return { x: r.x + p.f[0] * r.w, y: r.y + p.f[1] * r.h }
+  return { x: r.x + p.f[0] * r.w, y: r.y + p.f[1] * r.h, r }
 }
 
 // =============================================================================================
@@ -191,13 +206,14 @@ function createCutter(pool, seed) {
   const rnd = mulberry32(seed)
   const byId = Object.fromEntries(pool.map((p) => [p.id, p]))
   const bright = Math.max(...pool.map((p) => p.m))
+  const maxP = Math.max(...pool.map(presence))
   const N = Math.min(8, Math.floor(pool.length / 2))
   const st = { seq: [], lightRun: 1, serRun: 1, darkMode: false, darkCnt: 0 }
 
-  // Regel 8 — öppning: starkaste blicken och hårdaste ljuset i serien som ligger först.
+  // Regel 8 — öppning: starkaste närvaron (ansikte × hårt ljus) i serien som ligger först.
   function open() {
     const first = pool.filter((p) => p.s === pool[0].s)
-    first.sort((a, b) => (b.d * 2 + b.h) - (a.d * 2 + a.h))
+    first.sort((a, b) => (presence(b) * 2 + b.h) - (presence(a) * 2 + a.h))
     const p = first[0]
     st.seq = [p]
     st.darkCnt = p.m < .25 ? 1 : 0
@@ -218,8 +234,8 @@ function createCutter(pool, seed) {
       const parts = []
       let s = 0, why = ''
       const add = (name, v) => { parts.push([name, v]); s += v }
-      // 1. Blickslag — var tredje bild ska ha direkt blick.
-      if ((idx + 1) % 3 === 0) { if (B.d) add('blickslag', 3); else why = 'blickslag krävs' }
+      // 1. Närvaroslag — var tredje bild ska bära stark närvaro (ansikte × hårt ljus).
+      if ((idx + 1) % 3 === 0) { const pr = maxP > 0 ? presence(B) / maxP : 0; if (pr >= 0.5) add('närvaroslag', 3 * pr); else why = 'närvaro krävs' }
       // 2. Matchklipp — B:s fokus nära A:s fokus i skärmkoordinater; ögon mot ögon.
       const fb = focusAt(B, W, H)
       const d = Math.hypot(fb.x - fa.x, fb.y - fa.y) / diag
@@ -244,7 +260,7 @@ function createCutter(pool, seed) {
       if (st.darkCnt >= 2 && B.m === bright) add('ljusaste efter mörkt', 2)
       // 6. Serie — stanna 2–4, korsklipp på matchande blick.
       if (B.s === A.s) { if (st.serRun < 4) add('stannar i serien', 1); else why = why || 'serien mättad' }
-      else if (st.serRun >= 2 && A.d && B.d) add('korsklipp på blick', 2)
+      else if (st.serRun >= 2 && A.sc > .3 && B.sc > .3) add('korsklipp tätt mot tätt', 2)
       // 7. Uppmärksamhet — släktingar (samma serie) till det besökaren stannat vid / skippat.
       const ids = Object.keys(dwell)
       if (ids.some((k) => dwell[k] > 4000 && byId[k] && similar(byId[k], B))) add('uppmärksamhet', 1.5)
@@ -271,7 +287,7 @@ function createCutter(pool, seed) {
     return { B, score: best.s, parts: best.parts, rejected: out.slice(1, 4) }
   }
 
-  return { open, next, seq: () => st.seq }
+  return { open, next, seq: () => st.seq, maxP }
 }
 
 // =============================================================================================
@@ -334,13 +350,11 @@ function Room() {
   // Tempo: besökarens manuella klipp (intervall, EMA) styr filmen inom sessionen.
   const tempoRef = useRef({ ema: 0, n: 0, last: 0 })
   const [tempo, setTempo] = useState(1)
-  // Närmare: håll (pekare) eller luta sig fram (kamera).
+  // Närmare: håll (pekare).
   const pointer = useRef({ down: false, t: 0, x: 0, y: 0, moved: false, held: false, timer: null })
   const [closer, setCloser] = useState(0)          // 0 = vila, annars skalfaktor
-  // Blicken (kamera, opt-in, lokal).
-  const [cam, setCam] = useState('off')            // off | asking | on | denied | error | ended
-  const camRef = useRef({ stream: null, lm: null, loop: null, video: null, base: null, samples: [], lookState: false, since: 0, armed: false, lean: false, absentSince: 0, lastSeen: 0, info: '' })
-  const videoRef = useRef(null)
+  const breathRef = useRef(null)
+  const [blank, setBlank] = useState(false)        // kapitelandningen
   // Beviset på begäran.
   const [proofOpen, setProofOpen] = useState(false)
   const [proof, setProof] = useState(null)         // metadata för aktuell bild
@@ -406,8 +420,14 @@ function Room() {
     const res = cutter.next(A, W, H, { ...dwell.current, [A.id]: now - lastT.current }, (B) => loaded.current.has(B.id))
     if (!res) { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), 250); return }   // inget laddat än — försök strax igen
     dwell.current[A.id] = now - lastT.current
-    const fa = focusAt(A, W, H), fb = focusAt(res.B, W, H)
-    pending.current = { A, B: res.B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y }
+    const B = res.B
+    const fa = focusAt(A, W, H), fb = focusAt(B, W, H)
+    // Skalmatchning: B börjar med ansiktet lika stort som A:s (ögonen på A:s ögon); vidbild öppnar närmare fokus.
+    let s0 = 1
+    if (A.sc > 0 && B.sc > 0) s0 = Math.max(MATCH_MIN, Math.min(MATCH_MAX, (A.sc * fa.r.h) / (B.sc * fb.r.h)))
+    else if (!(B.sc > 0)) s0 = PANO_IN
+    const chapter = A.s !== B.s
+    const pd = { A, B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y, s0, chapter }
     lastT.current = now
     lastCut.current = now
     if (manual) {   // besökarens takt: EMA av intervallen mellan manuella klipp
@@ -417,15 +437,26 @@ function Room() {
     }
     setProofOpen(false)
     setCloser(0)
-    setCur(res.B)
-    setTrace({ ...res, glide: Math.hypot(fa.x - fb.x, fa.y - fb.y) })
-    setCutNo((n) => n + 1)
+    const show = () => { pending.current = pd; setBlank(false); setCur(B); setTrace({ ...res, glide: Math.hypot(pd.dx, pd.dy), s0, chapter }); setCutNo((n) => n + 1) }
+    if (chapter && !reduced) { clearTimeout(timer.current); setBlank(true); setTimeout(show, CHAPTER_MS) }   // kapitelandningen
+    else show()
   }
   const cutRef = useRef(cut)
   cutRef.current = cut
 
-  // Klippögonblicket: B har just renderats i vila — flytta den (utan övergång) så att fokus ligger på A:s
-  // skärmposition, tvinga layout, och låt den sedan glida till vila på nästa bildruta. Ringen följer.
+  // Klippögonblicket: B har just renderats i vila — flytta och skala den (utan övergång, kring sina ögon) så att
+  // ögonen ligger på A:s ögon i A:s storlek, tvinga layout, och låt den sedan glida till vila på nästa bildruta.
+  // Andningen startar samtidigt: en långsam rörelse under bildens tid. Ringen (debug) följer ögonen.
+  const breathe = (p, ms) => {
+    const b = breathRef.current
+    if (!b || !p) return
+    b.style.transition = 'none'
+    b.style.transform = 'scale(1)'
+    void b.offsetWidth
+    if (reduced) return
+    const target = p.sc > .3 ? 1 - BREATH : p.sc > 0 ? 1 + BREATH : 1 - BREATH * 0.6
+    requestAnimationFrame(() => { b.style.transition = `transform ${Math.max(1500, ms)}ms cubic-bezier(.33,0,.67,1)`; b.style.transform = `scale(${target})` })
+  }
   useLayoutEffect(() => {
     const pd = pending.current
     if (!pd) return
@@ -433,31 +464,34 @@ function Room() {
     const el = printRef.current, rg = ringRef.current
     if (!el) return
     el.style.transition = 'none'
-    el.style.transform = `translate(${pd.dx}px,${pd.dy}px)`
+    el.style.transform = `translate(${pd.dx}px,${pd.dy}px) scale(${pd.s0})`
     if (rg) { rg.style.transition = 'none'; rg.style.left = pd.fa.x + 'px'; rg.style.top = pd.fa.y + 'px' }
     void el.offsetWidth
-    if (typeof window.__klippetOnCut === 'function') window.__klippetOnCut({ el, A: pd.A, B: pd.B, fa: pd.fa, fb: pd.fb, dx: pd.dx, dy: pd.dy })
+    if (typeof window.__klippetOnCut === 'function') window.__klippetOnCut({ el, A: pd.A, B: pd.B, fa: pd.fa, fb: pd.fb, dx: pd.dx, dy: pd.dy, s0: pd.s0, chapter: pd.chapter })
+    breathe(pd.B, dwellFor(pd.B, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0))
     requestAnimationFrame(() => {
       el.style.transition = reduced ? 'none' : `transform ${GLIDE_MS}ms ${EASE}`
-      el.style.transform = 'translate(0,0)'
+      el.style.transform = 'translate(0,0) scale(1)'
       if (rg) {
         rg.style.transition = reduced ? 'none' : `left ${GLIDE_MS}ms ${EASE}, top ${GLIDE_MS}ms ${EASE}`
         rg.style.left = pd.fb.x + 'px'
         rg.style.top = pd.fb.y + 'px'
       }
     })
-  }, [cutNo])
+  }, [cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Öppningsbilden andas också.
+  useEffect(() => { if (cur && cutNo === 0) breathe(cur, dwellFor(cur, dwellMs, 1, cutter ? cutter.maxP : 0)) }, [cur, cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filmen — dwell-styrd, med klipparens tempo. Rörelse över bilden håller; närmare håller; en besökare som
   // tittar (kamera) håller; en flik i bakgrunden pausar.
   const curRef = useRef(null); curRef.current = cur
   const tempoRef2 = useRef(1); tempoRef2.current = tempo
-  const holdRef = useRef(false)   // sant medan blicken vilar på bilden eller närmare är aktivt
+  const holdRef = useRef(false)   // sant medan närmare är aktivt
   const schedule = () => {
     clearTimeout(timer.current)
     if (holdRef.current) return
     const p = curRef.current
-    timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current) : dwellMs)
+    timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0) : dwellMs)
   }
   useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur, tempo])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -500,72 +534,12 @@ function Room() {
     if (!p.down) return
     p.down = false
     clearTimeout(p.timer)
-    if (p.held) { p.held = false; setCloser(camRef.current.lean ? CLOSER_LEAN : 0); setHold(camRef.current.lookState); return }
+    if (p.held) { p.held = false; setCloser(0); setHold(false); return }
     const dy = p.y - e.clientY
     if (dy > 40) { cutRef.current(true); return }
     if (!p.moved && performance.now() - p.t < HOLD_MS + 200) cutRef.current(true)
   }
-  const onPointerCancel = () => { const p = pointer.current; p.down = false; clearTimeout(p.timer); if (p.held) { p.held = false; setCloser(0); setHold(camRef.current.lookState) } }
-
-  // Blicken — kameran på besökarens ja. Allt lokalt: bildrutorna går från <video> till modellen och ingenstans.
-  const startCamera = async () => {
-    if (cam !== 'off') return
-    setCam('asking')
-    const c = camRef.current
-    try {
-      const md = typeof navigator !== 'undefined' && navigator.mediaDevices
-      if (!md || !md.getUserMedia) throw new Error('ingen kamera-API')
-      c.stream = await md.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
-      const v = videoRef.current
-      if (!v) throw new Error('video saknas')
-      v.srcObject = c.stream
-      await v.play()
-      c.video = v
-      const r = await loadLandmarker({ mode: 'VIDEO', numFaces: 1, onStatus: (t) => { c.info = t } })
-      c.lm = r.lm
-      c.info = 'ser · ' + r.delegate
-      c.base = null; c.samples = []; c.lookState = false; c.since = 0; c.armed = false; c.lean = false; c.absentSince = 0; c.lastSeen = performance.now()
-      setCam('on')
-      const step = () => {
-        if (!c.lm || !c.video || c.video.readyState < 2) { c.loop = setTimeout(step, 66); return }
-        const now = performance.now()
-        let face = null
-        try { face = parseFaces(c.lm.detectForVideo(c.video, now))[0] || null } catch (e) { caught.push('kamera: ' + (e.message || e)) }
-        if (!face) {
-          if (!c.absentSince) c.absentSince = now
-          if (c.lookState && now - c.absentSince > GAZE_HYST_MS) { c.lookState = false; c.since = now; holdRef.current = false; schedule() }
-          if (c.lean) { c.lean = false; setCloser(0) }
-          c.info = 'ser ingen'
-        } else {
-          c.absentSince = 0; c.lastSeen = now
-          const size = face.box[3], dir = face.gaze.dir
-          if (!c.base) { c.samples.push({ p: dir[1], s: size }); if (c.samples.length >= 20) { const ps = c.samples.map((x) => x.p).sort((a, b) => a - b), ss = c.samples.map((x) => x.s).sort((a, b) => a - b); c.base = { pitch: ps[ps.length >> 1], size: ss[ss.length >> 1] } } }
-          const base = c.base || { pitch: dir[1], size }
-          const lookingNow = Math.abs(dir[0]) < GAZE_H && Math.abs(dir[1] - base.pitch) < GAZE_V
-          if (lookingNow !== c.lookState) {
-            if (!c.since) c.since = now
-            if (now - c.since > GAZE_HYST_MS) {
-              c.lookState = lookingNow; c.since = 0
-              if (lookingNow) { c.armed = true; holdRef.current = true; clearTimeout(timer.current) }
-              else { holdRef.current = false; if (c.armed) { c.armed = false; cutRef.current(false) } else schedule() }
-            }
-          } else c.since = 0
-          const ratio = size / (base.size || size)
-          if (!c.lean && ratio > LEAN_IN) { c.lean = true; if (!pointer.current.held) setCloser(CLOSER_LEAN) }
-          else if (c.lean && ratio < LEAN_OUT) { c.lean = false; if (!pointer.current.held) setCloser(0) }
-          c.info = `${c.lookState ? 'tittar' : 'tittar inte'} · blick ${dir[0]}/${Math.round(dir[1] - base.pitch)} · avstånd ${ratio.toFixed(2)}${c.lean ? ' · närmare' : ''}`
-        }
-        c.loop = setTimeout(step, 66)
-      }
-      step()
-    } catch (e) {
-      caught.push('kamera: ' + (e.message || e))
-      try { c.stream && c.stream.getTracks().forEach((t) => t.stop()) } catch (e2) { /* tyst */ }
-      c.stream = null
-      setCam(/NotAllowed|Permission|denied/i.test(String(e && e.name || e)) ? 'denied' : 'error')
-    }
-  }
-  useEffect(() => () => { const c = camRef.current; clearTimeout(c.loop); try { c.stream && c.stream.getTracks().forEach((t) => t.stop()) } catch (e) { /* tyst */ } }, [])
+  const onPointerCancel = () => { const p = pointer.current; p.down = false; clearTimeout(p.timer); if (p.held) { p.held = false; setCloser(0); setHold(false) } }
 
   // Beviset på begäran — etiketten öppnar Content Credentials för aktuell bild.
   const toggleProof = (e) => {
@@ -588,6 +562,13 @@ function Room() {
   const mono = { fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.6, color: '#9a9a9a' }
   // Etiketten på skuggsidan: kommer ljuset från vänster (90°–270°) är skuggan till höger.
   const labelSide = cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
+  // Andningens origo: ögonen, förskjutna mot ljuset (en tiondel av ansiktshöjden).
+  const breathOrigin = (() => {
+    if (!cur) return '50% 50%'
+    const k = 0.1 * (cur.sc > 0 ? cur.sc : 0.3), a = ((Number.isFinite(cur.l) ? cur.l : 90) * Math.PI) / 180
+    const ox = cur.f[0] + (k / (cur.r || 1)) * Math.cos(a), oy = cur.f[1] - k * Math.sin(a)
+    return `${(Math.max(0, Math.min(1, ox)) * 100).toFixed(2)}% ${(Math.max(0, Math.min(1, oy)) * 100).toFixed(2)}%`
+  })()
 
   return (
     <div
@@ -601,19 +582,18 @@ function Room() {
       style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
     >
       {cur && r && (
-        <div ref={printRef} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, willChange: 'transform' }}>
-          {cur.url
-            ? <img key={cur.id} src={cur.url} alt={cur.alt || ''} draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }} />
-            : <div style={{ width: '100%', height: '100%', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}><Print key={cur.id} p={cur} /></div>}
+        <div ref={printRef} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, willChange: 'transform', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%` }}>
+          <div ref={breathRef} style={{ width: '100%', height: '100%', transformOrigin: breathOrigin, willChange: 'transform' }}>
+            <div style={{ width: '100%', height: '100%', transformOrigin: `${cur.f[0] * 100}% ${cur.f[1] * 100}%`, transform: closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}>
+              {cur.url
+                ? <img key={cur.id} src={cur.url} alt={cur.alt || ''} draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
+                : <Print key={cur.id} p={cur} />}
+            </div>
+          </div>
         </div>
       )}
+      {blank && <div style={{ position: 'absolute', inset: 0, background: '#000' }} />}
       <a href="/" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 18, top: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 19, letterSpacing: '.02em', color: '#8a8a8a', textDecoration: 'none' }}>Gaahlin</a>
-      {cam === 'off' && cur && cur.url && (
-        <button type="button" onClick={(e) => { e.stopPropagation(); startCamera() }} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
-          style={{ position: 'absolute', right: 18, top: 16, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, letterSpacing: '.1em', color: '#6a6a6a', cursor: 'pointer' }}>
-          Låt porträtten se dig
-        </button>
-      )}
       {cur && (
         <button type="button" onClick={toggleProof} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} aria-expanded={proofOpen}
           style={{ position: 'absolute', bottom: 16, [labelSide]: 18, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, letterSpacing: '.1em', color: proofOpen ? '#cfcfcf' : '#7a7a7a', cursor: cur.url ? 'pointer' : 'default', textAlign: labelSide === 'right' ? 'right' : 'left' }}>
@@ -643,7 +623,7 @@ function Room() {
           </div>
         )
       })()}
-      <video ref={videoRef} playsInline muted autoPlay style={{ position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />
+
       {debug && f && (
         <div ref={ringRef} style={{ position: 'absolute', left: f.x, top: f.y, width: 26, height: 26, margin: '-13px 0 0 -13px', border: '1.5px solid #fff', borderRadius: '50%', opacity: .85, pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', left: 11, top: 11, width: 2, height: 2, background: '#fff', borderRadius: '50%' }} />
@@ -656,11 +636,11 @@ function Room() {
         <div style={{ position: 'absolute', left: 14, top: 40, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
           <div>
             {`klipp ${cutNo} · ${cur.uid ? 'bild' : 'print'} ${cur.id} · ${cur.s}` +
-              (trace ? ` · glid ${Math.round(trace.glide)} px · ${reduced ? 0 : GLIDE_MS} ms` : ' · öppning') +
+              (trace ? ` · glid ${Math.round(trace.glide)} px · skala vid klipp ${trace.s0.toFixed(2)} · ${reduced ? 0 : GLIDE_MS} ms${trace.chapter ? ' · kapitel' : ''}` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
           <div>{`pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade`}</div>
-          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo)} ms · närmare ${closer || '–'} · kamera ${cam}${camRef.current.info ? ' · ' + camRef.current.info : ''}${proofOpen ? ' · bevis öppet' : ''}`}</div>
+          <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · andning ±${Math.round(BREATH * 100)} % mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
           {trace && <div>{'förkastade: ' + trace.rejected.map((x) => `print ${x.B.id} (${x.s < -50 ? x.why : x.s.toFixed(1) + (x.why ? ': ' + x.why : '')})`).join(', ')}</div>}

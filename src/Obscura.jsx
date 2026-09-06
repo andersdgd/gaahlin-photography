@@ -1,4 +1,7 @@
 // Gaahlin Photography — Obscura.jsx (visningsrummet, prototyp)
+// v0.1.2 — Buggfix: onLoad läste ev.currentTarget inuti setDims-uppdateraren (körs senare, React har
+//   nollat currentTarget) → "null is not an object (evaluating currentTarget.naturalWidth)" så fort
+//   första bilden laddat. Nu läses måtten synkront i handlern. Repro med riktiga bilder över HTTP.
 // v0.1.1 — Diagnostik + robusthet efter svart sida i Safari (Chromium-repro var ren):
 //   • Felgräns (ErrorBoundary) runt hela rummet — ett körfel visas som text på sidan i stället för svart.
 //   • ?debug=1 visar en läsbar mätremsa: ramar, aktiv, scrollTop/clientHeight/progress, fångade fel.
@@ -581,7 +584,7 @@ function Room() {
             alt=""
             decoding="async"
             draggable={false}
-            onLoad={(ev) => setDims((x) => x[i] ? x : { ...x, [i]: { w: ev.currentTarget.naturalWidth, h: ev.currentTarget.naturalHeight } })}
+            onLoad={(ev) => { const w = ev.currentTarget.naturalWidth, h = ev.currentTarget.naturalHeight; setDims((x) => x[i] ? x : { ...x, [i]: { w, h } }) }}
           />
         ))}
       </div>

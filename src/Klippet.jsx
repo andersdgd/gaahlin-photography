@@ -1,4 +1,13 @@
 // Gaahlin Photography — Klippet.jsx (rummet, Arc 8)
+// v0.6.0 — Rummet flyttar in på startsidan (Anders 2026-09-06: "slår ihop allt och tar bort /obscura").
+//   Ingen egen rutt. Exporterar `Room` med två lägen och `fetchPool` (PublicSite hämtar poolen en gång och ger den
+//   till båda instanserna):
+//   • mode="hero": ligger i #hero-sektionen (position absolute), sajtens nav ovanpå; tapp klipper, håll kommer
+//     närmare, scroll/svep går ner i sajten (touch-action pan-y, inget hjul), inga tangenter. Etiketten alltid nere
+//     till vänster (hero-metan bor till höger). Pausar när sektionen är utanför rutan eller överlägget är öppet.
+//   • mode="overlay": helskärm ovanpå sajten (z 1000), öppnar på `startUid` (bilden besökaren tryckte) och filmen
+//     fortsätter därifrån; Stäng-knapp, Esc eller svep nedåt stänger (`onClose`). Hjul och svep uppåt klipper.
+//   Förladdningen delas mellan instanserna (modulcache per URL) så överlägget öppnar direkt på en redan laddad bild.
 // v0.5.0 — Övergången väljs per bildpar ur bildernas egna kanter (mätta vid förladdning, 32×32 via canvas — CORS grön):
 //   • Svart möter svart (båda bildernas kanter < 8 % luminans): det hårda klippet på ögonen, som förut (560 ms glid).
 //   • Annars: dissolve — B tonas in ovanpå A under 1 200 ms medan A tonas ut, mjuk kurva i båda ändar
@@ -108,7 +117,7 @@ const FIXTURES = [
 // l (ljusets vinkel), sc (ansiktsbox/höjd), m (medelluminans), h (hårdhet), e (embedding), url, title, intel.
 // =============================================================================================
 const NEUTRAL = { f: [0.5, 0.42], l: 90, sc: 0, m: 0.5, h: 0.5, sd: 0.15 }
-async function fetchPool(gSlug) {
+export async function fetchPool(gSlug) {
   if (!supabase) throw new Error('Supabase-klienten saknas (env)')
   let q = supabase
     .from('galleries')
@@ -129,7 +138,7 @@ async function fetchPool(gSlug) {
       const face = x && x.faces && x.faces[0]
       const w = im.width || 3, h = im.height || 2
       pool.push({
-        id: ++n, uid: im.id, s: gal.slug, title: gal.title, r: w / h, url: publicUrl(im.storage_path),
+        id: ++n, uid: im.id, gid: gal.id, s: gal.slug, title: gal.title, imgTitle: im.title || '', r: w / h, url: publicUrl(im.storage_path),
         f: (x && x.focus && x.focus.length === 2) ? x.focus : NEUTRAL.f,
         l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
         sc: face ? face.box[3] : NEUTRAL.sc,
@@ -162,6 +171,24 @@ function edgeLuminance(img) {
   } catch (e) { return null }
 }
 const isDark = (p) => (Number.isFinite(p.edge) ? p.edge < EDGE_DARK : p.m < 0.12)
+// Delad förladdning: en Image per URL oavsett hur många rum som visar poolen. Lyssnare får besked när den är laddad.
+const preloads = new Map()   // url → { done, ok, edge, listeners }
+function preload(p, onDone) {
+  let e = preloads.get(p.url)
+  if (!e) {
+    e = { done: false, ok: false, edge: null, listeners: [] }
+    preloads.set(p.url, e)
+    const im = new Image()
+    im.crossOrigin = 'anonymous'   // samma CORS-läge som <img> i rummet → en hämtning, och kanterna får läsas
+    im.decoding = 'async'
+    im.onload = () => { e.done = true; e.ok = true; e.edge = edgeLuminance(im); e.listeners.splice(0).forEach((f) => f(e)) }
+    im.onerror = () => { e.done = true; e.ok = false; e.listeners.splice(0).forEach((f) => f(e)) }
+    im.src = p.url
+  }
+  if (e.done) onDone(e)
+  else e.listeners.push(onDone)
+  return () => { const i = e.listeners.indexOf(onDone); if (i >= 0) e.listeners.splice(i, 1) }
+}
 // Närvaro: ansiktets storlek i ramen × ljusets hårdhet — det klipparen väljer starkaste bild på.
 const presence = (p) => (p.sc > 0 ? p.sc * (0.5 + 0.5 * (Number.isFinite(p.h) ? p.h : 0.5)) : 0)
 const cosine = (a, b) => { let s = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i] * b[i]; return s }
@@ -243,8 +270,10 @@ function createCutter(pool, seed) {
   const N = Math.min(8, Math.floor(pool.length / 2))
   const st = { seq: [], lightRun: 1, serRun: 1, darkMode: false, darkCnt: 0 }
 
-  // Regel 8 — öppning: starkaste närvaron (ansikte × hårt ljus) i serien som ligger först.
-  function open() {
+  // Regel 8 — öppning: starkaste närvaron (ansikte × hårt ljus) i serien som ligger först — eller en vald bild.
+  function open(uid) {
+    const chosen = uid != null ? pool.find((p) => p.uid === uid || p.id === uid) : null
+    if (chosen) { st.seq = [chosen]; st.darkCnt = chosen.m < .25 ? 1 : 0; return chosen }
     const first = pool.filter((p) => p.s === pool[0].s)
     first.sort((a, b) => (presence(b) * 2 + b.h) - (presence(a) * 2 + a.h))
     const p = first[0]
@@ -357,7 +386,8 @@ function Print({ p }) {
 // =============================================================================================
 // Rummet
 // =============================================================================================
-function Room() {
+export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, onClose = null, closeLabel = 'Stäng', active = true }) {
+  const overlay = mode === 'overlay'
   const debug = param('debug') === '1'
   const fixtur = param('fixtur') === '1'
   const [seed] = useState(() => { const s = Number(param('seed')); return Number.isFinite(s) && s > 0 ? Math.floor(s) : (Date.now() % 1000000000) })
@@ -406,20 +436,21 @@ function Room() {
     return () => window.removeEventListener('resize', m)
   }, [])
 
-  // Poolen: databasen (publika bilder + intelligens) eller fixturerna.
+  // Poolen: från sajten (prop), annars databasen, annars fixturerna.
   useEffect(() => {
     let alive = true
     const useFixtures = (why) => { if (!alive) return; setSource('fixtur' + (why ? ' (' + why + ')' : '')); setPool(FIXTURES) }
     if (fixtur) { useFixtures(''); return }
-    fetchPool(param('g')).then((p) => {
+    if (poolProp) { if (poolProp.length) { setSource('sajten'); setPool(poolProp) } else useFixtures('tom pool'); return }
+    fetchPool(null).then((p) => {
       if (!alive) return
       if (!p.length) { useFixtures('inga publika bilder'); return }
       setSource('db'); setPool(p)
     }).catch((e) => { caught.push('pool: ' + (e.message || e)); useFixtures(e.message || String(e)) })
     return () => { alive = false }
-  }, [fixtur])
+  }, [fixtur, poolProp])
 
-  // Förladdning: varje bild i poolen laddas i bakgrunden; klipparen ser bara laddade. Fixturer är alltid "laddade".
+  // Förladdning: varje bild i poolen laddas i bakgrunden (delad cache); klipparen ser bara laddade. Fixturer är alltid "laddade".
   useEffect(() => {
     if (!pool) return
     loaded.current = new Set()
@@ -427,22 +458,18 @@ function Room() {
     setCutter(c)
     if (!pool[0].url) { pool.forEach((p) => { p.edge = 0.157 * p.m; loaded.current.add(p.id) }); setLoadedCount(pool.length); return }
     let alive = true
-    const imgs = pool.map((p) => {
-      const im = new Image()
-      im.crossOrigin = 'anonymous'   // samma CORS-läge som <img> i rummet → en hämtning, och kanterna får läsas
-      im.decoding = 'async'
-      im.onload = () => { if (!alive) return; p.edge = edgeLuminance(im); loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
-      im.onerror = () => { caught.push('bild laddade inte: ' + p.url) }
-      im.src = p.url
-      return im
-    })
-    return () => { alive = false; imgs.forEach((im) => { im.onload = null; im.onerror = null }) }
+    const offs = pool.map((p) => preload(p, (e) => {
+      if (!alive) return
+      if (e.ok) { p.edge = e.edge; loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
+      else caught.push('bild laddade inte: ' + p.url)
+    }))
+    return () => { alive = false; offs.forEach((off) => off()) }
   }, [pool, seed])
 
-  // Öppning — i samma ögonblick som öppningsbilden är laddad (fixturer: omedelbart).
+  // Öppning — i samma ögonblick som öppningsbilden är laddad (fixturer: omedelbart). Överlägget öppnar på startUid.
   useEffect(() => {
     if (!cutter || cur) return
-    const first = cutter.open()
+    const first = cutter.open(startUid)
     if (loaded.current.has(first.id)) { setCur(first); lastT.current = performance.now() }
   }, [cutter, loadedCount])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -555,29 +582,43 @@ function Room() {
   const curRef = useRef(null); curRef.current = cur
   const tempoRef2 = useRef(1); tempoRef2.current = tempo
   const holdRef = useRef(false)   // sant medan närmare är aktivt
+  const activeRef = useRef(active); activeRef.current = active
+  const inViewRef = useRef(true)
   const schedule = () => {
     clearTimeout(timer.current)
-    if (holdRef.current) return
+    if (holdRef.current || !activeRef.current || !inViewRef.current) return
     const p = curRef.current
     timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0) : dwellMs)
   }
-  useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur, tempo])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur, tempo, active])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Hero: pausa när sektionen inte syns (scrollad förbi).
+  const [inView, setInView] = useState(true)
+  useEffect(() => {
+    if (overlay || !stageRef.current || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver((es) => setInView(es.some((e) => e.isIntersecting)), { threshold: 0.15 })
+    io.observe(stageRef.current)
+    return () => io.disconnect()
+  }, [overlay])
+  useEffect(() => { inViewRef.current = inView; if (!cur) return; if (!inView) clearTimeout(timer.current); else schedule() }, [inView])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const v = () => { if (document.hidden) clearTimeout(timer.current); else { lastT.current = performance.now(); schedule() } }
     document.addEventListener('visibilitychange', v)
     return () => document.removeEventListener('visibilitychange', v)
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  const onCloseRef = useRef(onClose); onCloseRef.current = onClose
   useEffect(() => {
+    if (!overlay) return
     const k = (e) => {
-      if (e.key === 'Escape') { setProofOpen(false); return }
+      if (e.key === 'Escape') { if (proofOpenRef.current) setProofOpen(false); else if (onCloseRef.current) onCloseRef.current(); return }
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cutRef.current(true) }
     }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [])
+  }, [overlay])
+  const proofOpenRef = useRef(false); proofOpenRef.current = proofOpen
 
   const onWheel = (e) => {
-    if (e.deltaY <= 12) return
+    if (!overlay || e.deltaY <= 12) return
     const now = performance.now()
     if (now - lastWheel.current < 700) return
     lastWheel.current = now
@@ -604,7 +645,8 @@ function Room() {
     clearTimeout(p.timer)
     if (p.held) { p.held = false; setCloser(0); setHold(false); return }
     const dy = p.y - e.clientY
-    if (dy > 40) { cutRef.current(true); return }
+    if (overlay && dy < -80 && Math.abs(e.clientX - p.x) < 80) { if (onCloseRef.current) onCloseRef.current(); return }   // svep nedåt stänger
+    if (overlay && dy > 40) { cutRef.current(true); return }
     if (!p.moved && performance.now() - p.t < HOLD_MS + 200) cutRef.current(true)
   }
   const onPointerCancel = () => { const p = pointer.current; p.down = false; clearTimeout(p.timer); if (p.held) { p.held = false; setCloser(0); setHold(false) } }
@@ -628,8 +670,8 @@ function Room() {
   const r = cur && W ? layout(cur, W, H) : null
   const f = cur && W ? focusAt(cur, W, H) : null
   const mono = { fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.6, color: '#9a9a9a' }
-  // Etiketten på skuggsidan: kommer ljuset från vänster (90°–270°) är skuggan till höger.
-  const labelSide = cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
+  // Etiketten på skuggsidan (överlägg): kommer ljuset från vänster (90°–270°) är skuggan till höger. I hero alltid vänster.
+  const labelSide = overlay && cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
   // Andningens origo: ögonen, förskjutna mot ljuset (en tiondel av ansiktshöjden).
   const breathOriginOf = (p) => {
     const k = 0.1 * (p.sc > 0 ? p.sc : 0.3), a = ((Number.isFinite(p.l) ? p.l : 90) * Math.PI) / 180
@@ -646,7 +688,7 @@ function Room() {
       onPointerCancel={onPointerCancel}
       onWheel={onWheel}
       onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
+      style={{ position: overlay ? 'fixed' : 'absolute', inset: 0, zIndex: overlay ? 1000 : undefined, background: '#000', overflow: 'hidden', touchAction: overlay ? 'none' : 'pan-y', overscrollBehavior: overlay ? 'none' : undefined, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
     >
       {W > 0 && [prev, cur].filter((p, i, arr) => p && arr.indexOf(p) === i).map((p) => {
         const pr = layout(p, W, H)
@@ -665,10 +707,15 @@ function Room() {
         )
       })}
       {blank && <div style={{ position: 'absolute', inset: 0, background: '#000' }} />}
-      <a href="/" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 18, top: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 19, letterSpacing: '.02em', color: '#8a8a8a', textDecoration: 'none' }}>Gaahlin</a>
+      {overlay && (
+        <button type="button" onClick={(e) => { e.stopPropagation(); if (onClose) onClose() }} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
+          style={{ position: 'absolute', top: 'calc(1.5rem + env(safe-area-inset-top))', right: '1.5rem', background: 'none', border: 0, padding: '.5rem', font: 'inherit', fontSize: 8, letterSpacing: '.35em', textTransform: 'uppercase', color: 'rgba(255,255,255,.45)', cursor: 'pointer', zIndex: 3 }}>
+          {closeLabel}
+        </button>
+      )}
       {cur && (
         <button type="button" onClick={toggleProof} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} aria-expanded={proofOpen}
-          style={{ position: 'absolute', bottom: 16, [labelSide]: 18, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 12, letterSpacing: '.1em', color: proofOpen ? '#cfcfcf' : '#7a7a7a', cursor: cur.url ? 'pointer' : 'default', textAlign: labelSide === 'right' ? 'right' : 'left' }}>
+          style={{ position: 'absolute', bottom: overlay ? 16 : '3rem', [labelSide]: overlay ? 18 : '3rem', background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 9, letterSpacing: '.35em', textTransform: 'uppercase', color: proofOpen ? '#fff' : 'rgba(255,255,255,.45)', cursor: cur.url ? 'pointer' : 'default', textAlign: labelSide === 'right' ? 'right' : 'left', zIndex: 3 }}>
           {cur.title || `Serie ${cur.s}`}{debug ? ` · ${cur.uid ? 'bild' : 'print'} ${cur.id}${cur.intel === false ? ' · oanalyserad' : ''}` : ''}
         </button>
       )}
@@ -677,7 +724,7 @@ function Room() {
         const dt = { fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: '#6f6f6f', margin: '10px 0 2px' }
         const dd = { margin: 0, color: '#bdbdbd', fontSize: 12, lineHeight: 1.5 }
         return (
-          <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 44, [labelSide]: 18, width: 'min(78vw, 380px)', padding: '12px 14px', background: 'rgba(0,0,0,.72)', border: '1px solid #1e1e1e', borderRadius: 4, fontSize: 12, color: '#bdbdbd' }}>
+          <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: overlay ? 44 : 'calc(3rem + 28px)', [labelSide]: overlay ? 18 : '3rem', zIndex: 3, width: 'min(78vw, 380px)', padding: '12px 14px', background: 'rgba(0,0,0,.72)', border: '1px solid #1e1e1e', borderRadius: 4, fontSize: 12, color: '#bdbdbd' }}>
             <div style={{ color: d.credState === 'verified' ? '#e6c98a' : '#cfcfcf', fontSize: 12, letterSpacing: '.08em' }}>{d.credText}</div>
             {proof && proof.state === 'error' && <div style={{ ...dd, color: '#9a9a9a' }}>{proof.reason}</div>}
             {d.active && (
@@ -702,16 +749,16 @@ function Room() {
         </div>
       )}
       {debug && !cur && (
-        <div style={{ position: 'absolute', left: 14, top: 40, ...mono }}>{pool ? `väntar på öppningsbilden · pool ${source} · ${loadedCount}/${pool.length} laddade` : 'hämtar poolen …'}{caught.length ? '\n' + caught.join('\n') : ''}</div>
+        <div style={{ position: 'absolute', left: 14, top: 64, zIndex: 3, ...mono }}>{pool ? `väntar på öppningsbilden · pool ${source} · ${loadedCount}/${pool.length} laddade` : 'hämtar poolen …'}{caught.length ? '\n' + caught.join('\n') : ''}</div>
       )}
       {debug && cur && (
-        <div style={{ position: 'absolute', left: 14, top: 40, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
+        <div style={{ position: 'absolute', left: 14, top: 64, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', zIndex: 3, ...mono }}>
           <div>
             {`klipp ${cutNo} · ${cur.uid ? 'bild' : 'print'} ${cur.id} · ${cur.s}` +
               (trace ? ` · ${trace.mode} · glid ${Math.round(trace.glide)} px · skala ${trace.s0.toFixed(2)} · ${reduced ? 0 : trace.mode.startsWith('klipp') ? GLIDE_MS : trace.mode === 'genom svart' ? FADE_IN_MS : DISSOLVE_MS} ms` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
-          <div>{`pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade`}</div>
+          <div>{`${mode} · pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade${!active ? ' · pausad' : !inView ? ' · utanför rutan' : ''}`}</div>
           <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · kant ${Number.isFinite(cur.edge) ? (cur.edge * 100).toFixed(0) + ' %' : '–'} ${isDark(cur) ? 'svart' : 'bakgrund'} · andning ±${Math.round(BREATH * 100)} % mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
@@ -719,19 +766,9 @@ function Room() {
           {caught.length > 0 && <div style={{ color: '#f66' }}>{caught.join('\n')}</div>}
         </div>
       )}
-      {debug && (
-        <div style={{ position: 'absolute', right: 14, bottom: 40, ...mono }}>
-          <a href="/obscura/scen" style={{ color: '#9a9a9a' }}>scen</a> · <a href="/spegeln" style={{ color: '#9a9a9a' }}>spegeln</a> · <a href="/" style={{ color: '#9a9a9a' }}>stäng</a>
-        </div>
-      )}
     </div>
   )
 }
 
-export default function Klippet() {
-  return (
-    <Boundary>
-      <Room />
-    </Boundary>
-  )
-}
+// Felgränsen läggs av den som monterar rummet (PublicSite gör det). Exporteras för det.
+export { Boundary as RoomBoundary }

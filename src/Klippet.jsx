@@ -1,4 +1,13 @@
-// Gaahlin Photography — Klippet.jsx (levande mockup, Arc 8 pass 8.1)
+// Gaahlin Photography — Klippet.jsx (rummet, Arc 8 pass 8.1)
+// v0.2.0 — Riktiga bilder. Poolen hämtas ur gaahlin.galleries/images (publika, i galleriordning; ?g=<slug> =
+//   ett galleri, RLS avgör) och bildintelligensen ur gaahlin.image_intelligence (migration 0007, räknad i
+//   adminens Analys): fokus = mitt mellan ögonen, direkt blick, ljusriktning/hårdhet, ansiktsboxens andel,
+//   tonalitet, lum8-embedding (cosinuslikhet i regel 7). Bilder utan analys klipper på centrum med neutrala
+//   värden. Nativ <img> (HDR-vägen), en i taget på svart. Noll väntan: alla bilder förladdas vid öppning och
+//   klipparen väljer bara bland laddade; öppningsbilden visas i samma ögonblick som den är laddad.
+//   Kapitel = galleriets titel som hörnetikett. ?fixtur=1 = den syntetiska poolen från v0.1.0 (testbänk).
+//   Ingen DB-kontakt ⇒ fixturpoolen med orsaken i ?debug=1. Motorn (layout/focusAt/createCutter/klippet) orörd.
+//   Buggfix: dubbelklipps-spärren startade på 0 och svalde klipp under sidans första 300 ms — startvärde -1e9.
 // v0.1.0 — "Rummet ser bilderna": matchklippet på ögonen. Varje byte är ett hårt klipp där nästa bilds fokus
 //   (mellan ögonen) placeras exakt där föregående bilds fokus låg på skärmen; sedan glider bilden till vila
 //   på 560 ms (0 ms vid prefers-reduced-motion). Klipparen väljer nästa bild ur poolen med Anders partitur
@@ -14,6 +23,10 @@
 //   Testbänk: window.__klippetOnCut(info) anropas i klippögonblicket (bara när den finns).
 
 import { Component, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { supabase } from './lib/supabase'
+
+const BUCKET = 'gaahlin-public'
+const publicUrl = (key) => supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl
 
 // =============================================================================================
 // Felgräns + fångade fel (visas med ?debug=1 och vid krasch)
@@ -52,7 +65,7 @@ const param = (k) => (typeof window !== 'undefined' ? new URLSearchParams(window
 // d = direkt blick, l = ljusets riktning (grader: 0 = från höger, 90 = uppifrån, 180 = från vänster),
 // sc = ansiktsboxens andel av höjden (>0,30 = tätt), m = medelluminans (<0,25 = lågkey), h = ljusets hårdhet.
 // =============================================================================================
-const POOL = [
+const FIXTURES = [
   { id: 1, s: 'I', r: .8, f: [.50, .36], d: 1, l: 180, sc: .55, m: .22, h: .9 },
   { id: 2, s: 'I', r: .8, f: [.42, .40], d: 0, l: 170, sc: .25, m: .30, h: .6 },
   { id: 3, s: 'I', r: 1.5, f: [.62, .38], d: 1, l: 160, sc: .20, m: .35, h: .7 },
@@ -64,7 +77,51 @@ const POOL = [
   { id: 9, s: 'III', r: .8, f: [.50, .38], d: 1, l: 5, sc: .50, m: .15, h: .9 },
   { id: 10, s: 'III', r: 1, f: [.44, .44], d: 1, l: 90, sc: .30, m: .62, h: .4 },
 ]
-const BY_ID = Object.fromEntries(POOL.map((p) => [p.id, p]))
+
+// =============================================================================================
+// Poolen ur databasen — en rad per publik bild, i galleriordning, med intelligensen invävd.
+// Fält som klipparen läser: s (serie = galleri-slug), r (b/h), f (fokus 0..1), d (direkt blick),
+// l (ljusets vinkel), sc (ansiktsbox/höjd), m (medelluminans), h (hårdhet), e (embedding), url, title, intel.
+// =============================================================================================
+const NEUTRAL = { f: [0.5, 0.42], d: 0, l: 90, sc: 0, m: 0.5, h: 0.5 }
+async function fetchPool(gSlug) {
+  if (!supabase) throw new Error('Supabase-klienten saknas (env)')
+  let q = supabase
+    .from('galleries')
+    .select('id, slug, title, sort_order, images(id, storage_path, width, height, sort_order, is_public)')
+    .order('sort_order')
+  q = gSlug ? q.eq('slug', gSlug) : q.eq('is_public', true)
+  const g = await q
+  if (g.error) throw new Error('galleries: ' + g.error.message)
+  const ii = await supabase.from('image_intelligence').select('image_id, faces, focus, tonality, light, embedding')
+  const intel = {}
+  if (!ii.error) for (const r of ii.data || []) intel[r.image_id] = r
+  const pool = []
+  let n = 0
+  for (const gal of g.data || []) {
+    const ims = (gal.images || []).filter((im) => im.storage_path && (gSlug || im.is_public)).sort((a, b) => a.sort_order - b.sort_order)
+    for (const im of ims) {
+      const x = intel[im.id]
+      const face = x && x.faces && x.faces[0]
+      const w = im.width || 3, h = im.height || 2
+      pool.push({
+        id: ++n, uid: im.id, s: gal.slug, title: gal.title, r: w / h, url: publicUrl(im.storage_path),
+        f: (x && x.focus && x.focus.length === 2) ? x.focus : NEUTRAL.f,
+        d: face && face.gaze && face.gaze.direct ? 1 : 0,
+        l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
+        sc: face ? face.box[3] : NEUTRAL.sc,
+        m: x && x.tonality && Number.isFinite(x.tonality.mean) ? x.tonality.mean : NEUTRAL.m,
+        h: x && x.light && Number.isFinite(x.light.hardness) ? x.light.hardness : NEUTRAL.h,
+        e: x && Array.isArray(x.embedding) && x.embedding.length ? x.embedding : null,
+        intel: !!x,
+      })
+    }
+  }
+  return pool
+}
+const cosine = (a, b) => { let s = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) s += a[i] * b[i]; return s }
+// Likhet för regel 7: embedding om båda har en, annars serie-släktskap.
+const similar = (A, B) => (A.e && B.e) ? cosine(A.e, B.e) > 0.85 : A.s === B.s
 
 const DWELL_DEFAULT = 3000
 const GLIDE_MS = 560
@@ -99,6 +156,7 @@ const angleDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 
 
 function createCutter(pool, seed) {
   const rnd = mulberry32(seed)
+  const byId = Object.fromEntries(pool.map((p) => [p.id, p]))
   const bright = Math.max(...pool.map((p) => p.m))
   const N = Math.min(8, Math.floor(pool.length / 2))
   const st = { seq: [], lightRun: 1, serRun: 1, darkMode: false, darkCnt: 0 }
@@ -113,7 +171,7 @@ function createCutter(pool, seed) {
     return p
   }
 
-  function rank(A, W, H, dwell, ignoreRecent) {
+  function rank(A, W, H, dwell, ignoreRecent, ready) {
     const idx = st.seq.length
     const recent = ignoreRecent ? [] : st.seq.slice(-N).map((x) => x.id)
     const fa = focusAt(A, W, H)
@@ -122,6 +180,7 @@ function createCutter(pool, seed) {
     const out = []
     for (const B of pool) {
       if (B.id === A.id) continue
+      if (ready && !ready(B)) continue   // noll väntan: bara bilder som redan är laddade
       if (recent.includes(B.id)) { out.push({ B, s: -99, parts: [], why: 'repris inom ' + N }); continue }
       const parts = []
       let s = 0, why = ''
@@ -155,8 +214,8 @@ function createCutter(pool, seed) {
       else if (st.serRun >= 2 && A.d && B.d) add('korsklipp på blick', 2)
       // 7. Uppmärksamhet — släktingar (samma serie) till det besökaren stannat vid / skippat.
       const ids = Object.keys(dwell)
-      if (ids.some((k) => dwell[k] > 4000 && BY_ID[k].s === B.s)) add('uppmärksamhet', 1.5)
-      if (ids.some((k) => dwell[k] < 1000 && BY_ID[k].s === B.s && Number(k) !== B.id)) add('skippad släkting', -1)
+      if (ids.some((k) => dwell[k] > 4000 && byId[k] && similar(byId[k], B))) add('uppmärksamhet', 1.5)
+      if (ids.some((k) => dwell[k] < 1000 && byId[k] && Number(k) !== B.id && similar(byId[k], B))) add('skippad släkting', -1)
       // Brus.
       add('brus', rnd() * .1)
       out.push({ B, s, parts, why })
@@ -165,10 +224,11 @@ function createCutter(pool, seed) {
     return out
   }
 
-  function next(A, W, H, dwell) {
-    let out = rank(A, W, H, dwell, false)
-    if (!out.length || out[0].s < -50) out = rank(A, W, H, dwell, true)   // liten pool: släpp reprisspärren
+  function next(A, W, H, dwell, ready) {
+    let out = rank(A, W, H, dwell, false, ready)
+    if (!out.length || out[0].s < -50) out = rank(A, W, H, dwell, true, ready)   // liten pool: släpp reprisspärren
     const best = out[0]
+    if (!best) return null   // inget laddat att klippa till — vänta (rummet visar aldrig en oladdad bild)
     const B = best.B
     st.lightRun = angleDiff(A.l, B.l) < 45 ? st.lightRun + 1 : 1
     if (B.s === A.s) st.serRun += 1
@@ -217,10 +277,15 @@ function Print({ p }) {
 // =============================================================================================
 function Room() {
   const debug = param('debug') === '1'
+  const fixtur = param('fixtur') === '1'
   const [seed] = useState(() => { const s = Number(param('seed')); return Number.isFinite(s) && s > 0 ? Math.floor(s) : (Date.now() % 1000000000) })
   const dwellMs = Math.max(400, Number(param('dwell')) || DWELL_DEFAULT)
   const reduced = q('(prefers-reduced-motion: reduce)')
-  const [cutter] = useState(() => createCutter(POOL, seed))
+  const [pool, setPool] = useState(null)          // null = hämtas
+  const [source, setSource] = useState('')        // 'db' | 'fixtur' (+ orsak)
+  const [cutter, setCutter] = useState(null)
+  const loaded = useRef(new Set())                 // pool-id:n vars bild är laddad
+  const [loadedCount, setLoadedCount] = useState(0)
   const [size, setSize] = useState({ W: 0, H: 0 })
   const [cur, setCur] = useState(null)
   const [cutNo, setCutNo] = useState(0)
@@ -230,8 +295,8 @@ function Room() {
   const pending = useRef(null)
   const dwell = useRef({})
   const lastT = useRef(0)
-  const lastCut = useRef(0)
-  const lastWheel = useRef(0)
+  const lastCut = useRef(-1e9)     // -1e9: spärren får aldrig svälja det första klippet (0 skulle blockera sidans första 300 ms)
+  const lastWheel = useRef(-1e9)
   const touchY = useRef(null)
   const timer = useRef(null)
 
@@ -246,18 +311,55 @@ function Room() {
     return () => window.removeEventListener('resize', m)
   }, [])
 
-  // Öppning — omedelbart, inget att ladda.
-  useEffect(() => { setCur(cutter.open()); lastT.current = performance.now() }, [cutter])
+  // Poolen: databasen (publika bilder + intelligens) eller fixturerna.
+  useEffect(() => {
+    let alive = true
+    const useFixtures = (why) => { if (!alive) return; setSource('fixtur' + (why ? ' (' + why + ')' : '')); setPool(FIXTURES) }
+    if (fixtur) { useFixtures(''); return }
+    fetchPool(param('g')).then((p) => {
+      if (!alive) return
+      if (!p.length) { useFixtures('inga publika bilder'); return }
+      setSource('db'); setPool(p)
+    }).catch((e) => { caught.push('pool: ' + (e.message || e)); useFixtures(e.message || String(e)) })
+    return () => { alive = false }
+  }, [fixtur])
+
+  // Förladdning: varje bild i poolen laddas i bakgrunden; klipparen ser bara laddade. Fixturer är alltid "laddade".
+  useEffect(() => {
+    if (!pool) return
+    loaded.current = new Set()
+    const c = createCutter(pool, seed)
+    setCutter(c)
+    if (!pool[0].url) { pool.forEach((p) => loaded.current.add(p.id)); setLoadedCount(pool.length); return }
+    let alive = true
+    const imgs = pool.map((p) => {
+      const im = new Image()
+      im.decoding = 'async'
+      im.onload = () => { if (!alive) return; loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
+      im.onerror = () => { caught.push('bild laddade inte: ' + p.url) }
+      im.src = p.url
+      return im
+    })
+    return () => { alive = false; imgs.forEach((im) => { im.onload = null; im.onerror = null }) }
+  }, [pool, seed])
+
+  // Öppning — i samma ögonblick som öppningsbilden är laddad (fixturer: omedelbart).
+  useEffect(() => {
+    if (!cutter || cur) return
+    const first = cutter.open()
+    if (loaded.current.has(first.id)) { setCur(first); lastT.current = performance.now() }
+  }, [cutter, loadedCount])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cut = () => {
     const now = performance.now()
-    if (now - lastCut.current < 300) return
+    if (now - lastCut.current < 300 || !cutter) return
     const seq = cutter.seq()
     const A = seq[seq.length - 1]
     const { W, H } = sizeRef.current
     if (!A || !W || !H) return
+    const res = cutter.next(A, W, H, { ...dwell.current, [A.id]: now - lastT.current }, (B) => loaded.current.has(B.id))
+    if (!res) { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), 250); return }   // inget laddat än — försök strax igen
     dwell.current[A.id] = now - lastT.current
-    const res = cutter.next(A, W, H, dwell.current)
     const fa = focusAt(A, W, H), fb = focusAt(res.B, W, H)
     pending.current = { A, B: res.B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y }
     lastT.current = now
@@ -338,12 +440,14 @@ function Room() {
     >
       {cur && r && (
         <div ref={printRef} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, willChange: 'transform' }}>
-          <Print key={cur.id} p={cur} />
+          {cur.url
+            ? <img key={cur.id} src={cur.url} alt="" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
+            : <Print key={cur.id} p={cur} />}
         </div>
       )}
       {cur && (
         <div style={{ position: 'absolute', left: 18, bottom: 16, fontSize: 12, letterSpacing: '.1em', color: '#7a7a7a', pointerEvents: 'none' }}>
-          Serie {cur.s}{debug ? ` · print ${cur.id}` : ''}
+          {cur.title || `Serie ${cur.s}`}{debug ? ` · ${cur.uid ? 'bild' : 'print'} ${cur.id}${cur.intel === false ? ' · oanalyserad' : ''}` : ''}
         </div>
       )}
       {debug && f && (
@@ -351,14 +455,18 @@ function Room() {
           <div style={{ position: 'absolute', left: 11, top: 11, width: 2, height: 2, background: '#fff', borderRadius: '50%' }} />
         </div>
       )}
+      {debug && !cur && (
+        <div style={{ position: 'absolute', left: 14, top: 12, ...mono }}>{pool ? `väntar på öppningsbilden · pool ${source} · ${loadedCount}/${pool.length} laddade` : 'hämtar poolen …'}{caught.length ? '\n' + caught.join('\n') : ''}</div>
+      )}
       {debug && cur && (
         <div style={{ position: 'absolute', left: 14, top: 12, maxWidth: 'min(92vw, 680px)', pointerEvents: 'none', whiteSpace: 'pre-wrap', ...mono }}>
           <div>
-            {`klipp ${cutNo} · print ${cur.id} · serie ${cur.s}` +
+            {`klipp ${cutNo} · ${cur.uid ? 'bild' : 'print'} ${cur.id} · ${cur.s}` +
               (trace ? ` · glid ${Math.round(trace.glide)} px · ${reduced ? 0 : GLIDE_MS} ms` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
-          <div>{cutter.seq().map((p) => p.id).join(' → ')}</div>
+          <div>{`pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade`}</div>
+          <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}
           {trace && <div>{'förkastade: ' + trace.rejected.map((x) => `print ${x.B.id} (${x.s < -50 ? x.why : x.s.toFixed(1) + (x.why ? ': ' + x.why : '')})`).join(', ')}</div>}
           {caught.length > 0 && <div style={{ color: '#f66' }}>{caught.join('\n')}</div>}

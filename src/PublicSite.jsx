@@ -1,4 +1,16 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.12.0 — INTROT (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "byt ut HERO-bilden av mig i svartvitt och skapa
+//   exakt samma sak som porträttgalleriet istället … bild 1 upp, zoomar och byter snyggt till bild 2 o.s.v. … inte
+//   täcka upp hela skärmen som 'arbeten' gör utan som svartvita bilden … tonar över till nästa bild. Subtilt,
+//   snyggt och professionellt." Verdikt på mockupen: "Bygg detta, vi justerar live.")
+//   Heron är Rummet igen — <Room mode="hero" intro> i #hero, i samma ram som stillbilden: nav ovanpå, sidscroll,
+//   hero-metan och Scrolla kvar, scroll-parallaxen på ytterdiven kvar. Poolen är adminets intro-bildspel
+//   (site_content.hero_pool → parseHeroPool → poolFromSnapshot), INTE galleriets: bilderna bläddras i adminets
+//   ordning, andas inåt, tonar över med ögonen på ögonen. Ingen väntan: poolen kommer ur site_content, som heron
+//   redan inväntar (HERO_WAIT_MS) — fetchPool rör bara indexet och överlägget som förut. Tom lista ⇒ stillbilden
+//   exakt som v0.11.1. Kraschar Rummet visar RoomBoundary stillbilden (fallback) och felet går till konsolen.
+//   Överlägget pausar introt (active={!roomOpen}). Bildens tid / övertoning: INTRO_DWELL_MS 6000 / INTRO_DISSOLVE_MS
+//   1600 — skruvas live med ?dwell= och ?dissolve= på gaahlin.com, sedan hit.
 // v0.11.1 — Honeypottens maskering flyttad till klassen .hp-field i index.css (se den filen). Ett dolt,
 //   bortpositionerat inmatningsfält inuti ett formulär är en känd nätfiskesignatur; macOS klistra-in-skydd
 //   blockerade den här filen på den (2026-09-06, andra gången på denna fil). Ligger maskeringen i CSS och
@@ -46,11 +58,11 @@
 // Behåller: nav + språkväxlare (SV/NO/DK/FI/EN), mobilmeny, hero, statement, about,
 // kontakt (Supabase-insert till gaahlin.contacts), footer. (Lightboxen togs bort i v0.10.0.)
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './index.css'
 import { supabase } from './lib/supabase'
-import { fetchSiteContent, resolveContent, publicImageUrl } from './lib/siteContent'
-import { Room, RoomBoundary, fetchPool } from './Klippet'
+import { fetchSiteContent, resolveContent, publicImageUrl, parseHeroPool } from './lib/siteContent'
+import { Room, RoomBoundary, fetchPool, poolFromSnapshot } from './Klippet'
 
 // === Galleri-layout: justerade rader ===
 // Antal bilder per rad beror på viewport (speglar brytpunkterna i index.css).
@@ -75,6 +87,10 @@ const aspectOf = (im) => (im.width && im.height ? im.width / im.height : 1.5)
 // Hur länge heron som mest väntar på site_content innan default-bilden släpps fram.
 // site_content är en liten tabell; spärren finns för att en hängande DB aldrig ska ge svart hero.
 const HERO_WAIT_MS = 1200
+// Intro-bildspelet (pass 8.2): bildens tid och övertoningens längd. Mockupens värden, Anders 2026-09-10:
+// "Bygg detta, vi justerar live." Skruvas live med ?dwell=6000&dissolve=1600 på gaahlin.com, sedan hit.
+const INTRO_DWELL_MS = 6000
+const INTRO_DISSOLVE_MS = 1600
 
 // Delar en bildlista i rader om max `cols` bilder.
 function chunkRows(images, cols) {
@@ -220,6 +236,9 @@ export default function PublicSite() {
   const c = resolveContent(siteDb, currentLang)   // spamskydd: när besökaren först rörde formuläret
   // Hero-bilden: satt i adminet (Innehåll → Hero) eller repo-filen när fältet är tomt.
   const heroUrl = c.hero_image ? publicImageUrl(c.hero_image) : '/images/intro/me_bw.jpg'
+  // Intro-bildspelet: poolen ur site_content.hero_pool (adminets ögonblicksbild) — ingen fetchPool, ingen väntan
+  // utöver site_content som redan inväntas. Tom lista ⇒ stillbilden ovan, precis som i v0.11.
+  const heroPool = useMemo(() => poolFromSnapshot(parseHeroPool(c.hero_pool)), [c.hero_pool])
   const [galleries, setGalleries] = useState([])   // [{...galleri, images:[{...bild, url, flatIndex, uid}]}]
   const cols = useColumns()
 
@@ -476,18 +495,24 @@ export default function PublicSite() {
 
       <section id="hero" ref={heroSectionRef}>
         <div ref={heroImgRef} style={{ position: 'absolute', inset: 0, willChange: 'transform, opacity' }}>
-          {siteReady && (
-            <img
-              key={heroUrl}
-              className={`hero-img${heroReady ? ' settled' : ''}`}
-              src={heroUrl}
-              alt="Gaahlin Photography"
-              fetchPriority="high"
-              decoding="async"
-              onLoad={() => setHeroReady(true)}
-              onError={() => setHeroReady(true)}
-            />
-          )}
+          {siteReady && (heroPool.length > 0
+            ? (
+              <RoomBoundary fallback={<img className="hero-img settled" src={heroUrl} alt="Gaahlin Photography" decoding="async" />}>
+                <Room mode="hero" intro pool={heroPool} dwell={INTRO_DWELL_MS} dissolveMs={INTRO_DISSOLVE_MS} active={!roomOpen} />
+              </RoomBoundary>
+            )
+            : (
+              <img
+                key={heroUrl}
+                className={`hero-img${heroReady ? ' settled' : ''}`}
+                src={heroUrl}
+                alt="Gaahlin Photography"
+                fetchPriority="high"
+                decoding="async"
+                onLoad={() => setHeroReady(true)}
+                onError={() => setHeroReady(true)}
+              />
+            ))}
         </div>
         <div className="hero-bottom" style={{ pointerEvents: 'none' }}>
           <div className="hero-meta">

@@ -1,4 +1,13 @@
 // Gaahlin Photography — Klippet.jsx
+// v0.8.1 — INTROT BYTER AV SIG SJÄLVT (Anders 2026-09-10: "kan du göra så när zoom-effekten är slut byts bild automatiskt").
+//   Två buggar, båda reproducerade i bänken innan rättning:
+//   • onPointerMove anropade schedule() vid varje musrörelse — filmens regel "rörelse i rutan håller bilden" — vilket i
+//     introt betydde att nedräkningen började om vid varje pixel: så länge muspekaren rörde sig över heron byttes bilden
+//     ALDRIG. Zoomen tog slut, inget hände. Bänken körde utan mus och gick grön av just det skälet (0 klipp på 9 s med
+//     musen i rörelse, bildtid 2 s). Nu: rörelse håller bara filmen; introt går på sin egen klocka.
+//   • cutter.open(null) väljer den bild i första serien som har starkast närvaro — rätt för filmen, fel för introt, som
+//     är Anders ordning. Introt öppnar nu alltid på bild 1 i adminets lista. (Syntes inte i första bänken: alla tre hade
+//     samma närvaro; med olika närvaro öppnade den på bild 2.)
 // v0.8.0 — INTROT (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "bild 1 upp, zoomar och byter snyggt till bild 2
 //   o.s.v. Så det blir introt … inte täcka upp hela skärmen som 'arbeten' gör utan som svartvita bilden … tonar
 //   över till nästa bild. Subtilt, snyggt och professionellt." Verdikt på mockupen: "Bygg detta, vi justerar live.")
@@ -536,7 +545,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
   // Öppning — i samma ögonblick som öppningsbilden är laddad (fixturer: omedelbart). Överlägget öppnar på startUid.
   useEffect(() => {
     if (!cutter || cur) return
-    const first = cutter.open(startUid)
+    const first = cutter.open(startUid != null ? startUid : intro ? (pool[0].uid != null ? pool[0].uid : pool[0].id) : null)   // introt: alltid bild 1 i adminets ordning
     if (loaded.current.has(first.id)) { setCur(first); lastT.current = performance.now() }
   }, [cutter, loadedCount])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -717,7 +726,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     p.timer = setTimeout(() => { if (p.down && !p.moved) { p.held = true; setCloser(CLOSER_HOLD); setHold(true) } }, HOLD_MS)
   }
   const onPointerMove = (e) => {
-    schedule()
+    if (!intro) schedule()   // filmen: rörelse i rutan håller bilden. Introt går på sin egen klocka — annars byts bilden aldrig så länge musen rör sig (v0.8.1)
     const p = pointer.current
     if (p.down && !p.held && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12) p.moved = true
   }

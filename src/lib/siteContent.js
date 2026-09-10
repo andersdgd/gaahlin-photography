@@ -1,4 +1,12 @@
 // Gaahlin Photography — lib/siteContent.js
+// v0.2.0 — INTRO-BILDSPELET (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "bild 1 upp, zoomar och byter snyggt
+//   till bild 2 o.s.v. … och då måste du även göra om i admin så att jag kan byta eller lägga till bilder").
+//   Nytt fält `hero_pool` (kind 'pool', språkneutralt): bildspelets bilder i ordning, lagrat som en JSON-
+//   ögonblicksbild av precis det Rummet behöver per bild — bildrad, galleri och intelligensens siffror
+//   (ansiktsbox, fokus, tonalitet, ljus). Adminet skriver den när väljaren sparas; sajten läser den ur
+//   site_content, som redan inväntas (HERO_WAIT_MS), och bygger poolen med poolFromSnapshot i Klippet.jsx
+//   UTAN att vänta på fetchPool. Latensen är därmed densamma som stillbildens. Tomt fält ⇒ stillbilden
+//   (hero_image) precis som förut. Hjälpare: parseHeroPool / serializeHeroPool (tålig JSON).
 // v0.1.0 — Redaktionellt innehåll för publika sajten. Delas av PublicSite (läser) och
 //   AdminApp (skriver). Källa: gaahlin.site_content (key, locale, value). Allt som saknas
 //   i databasen faller tillbaka på DEFAULTS här — tabellen får vara tom.
@@ -18,8 +26,10 @@ export const BUCKET = 'gaahlin-public'
 // Fältschema: styr adminets formulär. group = rubrik i adminet, multiline = textarea,
 // neutral = språkoberoende (bild eller länk), kind = 'text' | 'image' | 'url'.
 export const FIELDS = [
-  { key: 'hero_image',      group: 'Hero',     label: 'Hero-bild',            kind: 'image', neutral: true,
-    hint: 'Fullbredd bakom rubriken. Liggande, gärna 2400 px bred. Används även som delningsbild.' },
+  { key: 'hero_pool',       group: 'Hero',     label: 'Intro-bildspel',       kind: 'pool',  neutral: true,
+    hint: 'Bilderna som heron visar i tur och ordning — varje bild andas inåt och tonar över till nästa med ögonen på ögonen. Välj ur biblioteket; bilder på svart flyter ihop med sajten. Tom lista = stillbilden nedan.' },
+  { key: 'hero_image',      group: 'Hero',     label: 'Stillbild',            kind: 'image', neutral: true,
+    hint: 'Visas när intro-bildspelet är tomt. Liggande, gärna 2400 px bred. Används även som delningsbild.' },
   { key: 'hero_genre',      group: 'Hero',     label: 'Genre-etikett',        kind: 'text' },
   { key: 'hero_city',       group: 'Hero',     label: 'Stad',                 kind: 'text',  neutral: true },
   { key: 'hero_year',       group: 'Hero',     label: 'År',                   kind: 'text',  neutral: true },
@@ -44,6 +54,7 @@ export const GROUPS = [...new Set(FIELDS.map((f) => f.group))]
 // Standardvärden = det som stod hårdkodat i PublicSite t.o.m. v0.8.1.
 export const DEFAULTS = {
   [NEUTRAL]: {
+    hero_pool: '',           // tomt = inget bildspel ⇒ stillbilden (hero_image)
     hero_image: '',          // tomt = repo-filen /images/intro/me_bw.jpg
     about_image: '',         // tomt = repo-filen /images/about/me.jpg
     hero_city: 'Stockholm',
@@ -97,6 +108,18 @@ export const DEFAULTS = {
     contact_sub: 'Open for portrait commissions,\neditorial, and personal projects.',
   },
 }
+
+// Intro-bildspelets ögonblicksbild: [{ im: {id, storage_path, width, height, title}, gal: {id, slug, title},
+// x: {faces:[{box}], focus, tonality:{mean,sd}, light:{angle,hardness}} | null }, …] i visningsordning.
+// Tålig läsning: allt som inte är en lista med bildrader blir en tom lista — sajten faller då på stillbilden.
+export function parseHeroPool(value) {
+  if (!value || typeof value !== 'string') return []
+  try {
+    const v = JSON.parse(value)
+    return Array.isArray(v) ? v.filter((e) => e && e.im && typeof e.im.storage_path === 'string' && e.im.storage_path) : []
+  } catch (e) { return [] }
+}
+export const serializeHeroPool = (list) => (list && list.length ? JSON.stringify(list) : '')
 
 export const publicImageUrl = (key) =>
   key ? supabase.storage.from(BUCKET).getPublicUrl(key).data.publicUrl : ''

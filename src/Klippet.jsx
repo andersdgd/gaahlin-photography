@@ -1,4 +1,13 @@
 // Gaahlin Photography — Klippet.jsx
+// v0.9.0 — INTROT PÅ MOBIL TÄCKER HÖJDEN (Anders 2026-09-10: "på mobilen blir ansiktena så små att effekten/zoomningen
+//   inte ens syns. Kan vi på iphone göra bildspelet större så att det täcker upp snyggare. Detta är enbart på mobilen.")
+//   layout(p, W, H, fill): i introt och en stående ruta (W < H) får en bild som är bredare än rutan täcka fill·H av
+//   höjden i stället för bredden — ögonen mitt i bredden och på hänglinjen (bara nedåt, hjässan beskärs aldrig). Det
+//   som försvinner på sidorna är intro-bildernas svarta bakgrund. TALL_FILL 0,85 ⇒ ansiktet ≈ 42 % av skärmhöjden
+//   (datorn: 45 %) med luft på sidorna; 1,0 ger huvudet kant i kant. Skruvas live med ?fill=0.6–1.0 på gaahlin.com.
+//   Liggande rutor och överlägget är orörda (fill=null = contain som förut).
+//   Uppmätt i bänken (iPhone 390×844, fill 0,85): bildrekt 717 px hög, ögonen på 195 px = mitt i bredden och på 42 %,
+//   bara sidorna beskurna, ögon på ögon 0,00 px; datorn byte för byte oförändrad (h 809, x 73).
 // v0.8.1 — INTROT BYTER AV SIG SJÄLVT (Anders 2026-09-10: "kan du göra så när zoom-effekten är slut byts bild automatiskt").
 //   Två buggar, båda reproducerade i bänken innan rättning:
 //   • onPointerMove anropade schedule() vid varje musrörelse — filmens regel "rörelse i rutan håller bilden" — vilket i
@@ -267,6 +276,7 @@ const DISSOLVE_MATCH = [0.85, 1.2]   // skalmatchning under dissolve, mjukare
 const PANO_IN_SOFT = 1.12
 const FADE_OUT_MS = 500, FADE_GAP_MS = 150, FADE_IN_MS = 900   // genom svart vid kapitelbyte
 const OPEN_FADE_MS = 900
+const TALL_FILL = 0.85      // introt i stående ruta: andel av höjden bilden täcker (?fill= vinner)
 const INTRO_OPEN_MS = 1400  // introts första bild: sajtens inglidning (index.css v0.5.0 / PublicSite v0.11.0)
 const EDGE_DARK = 0.08      // kanternas luminans under detta = "på svart"
 const BREATH = 0.05         // andningen: 5 % INÅT under bildens tid (3 % på oanalyserad bild)
@@ -289,9 +299,20 @@ function contain(p, W, H) {
 }
 // Vilorekt: bilder utan ansikte centreras; porträtt hänger med ögonen på hänglinjen. Bilden får krympa högst
 // (1 − HANG_MIN) för att nå linjen — räcker inte det läggs ögonen så nära linjen som ramen tillåter. Aldrig beskuren.
-function layout(p, W, H) {
+// fill (introt i stående ruta, v0.9.0): en bild som är bredare än rutan täcker fill·H av höjden i stället för bredden —
+// ögonen mitt i bredden, hänglinjen nedåt (aldrig uppåt: hjässan får inte beskäras). Det som försvinner på sidorna är
+// intro-bildernas svarta bakgrund. Ansiktet blir ~sc·fill·H. En bild som redan når den höjden är orörd.
+function layout(p, W, H, fill = null) {   // fill: null = contain; 0.4–1 = andel av höjden bilden ska täcka (introt i stående ruta)
   const base = contain(p, W, H)
-  if (!(p.sc > 0) || !(p.f[1] > 0.02 && p.f[1] < 0.98)) return base
+  const face = p.sc > 0 && p.f[1] > 0.02 && p.f[1] < 0.98
+  if (fill && base.h < H * fill) {
+    const h = H * fill, w = h * p.r
+    const fx = face && p.f[0] > 0.02 && p.f[0] < 0.98 ? p.f[0] : 0.5
+    const x = Math.max(W - w, Math.min(0, W / 2 - fx * w))
+    const y = face ? Math.max(0, HANG * H - p.f[1] * h) : 0
+    return { x, y, w, h }
+  }
+  if (!face) return base
   const hangY = HANG * H
   const hMax = Math.min(hangY / p.f[1], (H - hangY) / (1 - p.f[1]))
   let h = Math.min(base.h, hMax)
@@ -300,8 +321,8 @@ function layout(p, W, H) {
   const y = Math.max(0, Math.min(H - h, hangY - p.f[1] * h))
   return { x: (W - w) / 2, y, w, h }
 }
-function focusAt(p, W, H) {
-  const r = layout(p, W, H)
+function focusAt(p, W, H, fill) {
+  const r = layout(p, W, H, fill)
   return { x: r.x + p.f[0] * r.w, y: r.y + p.f[1] * r.h, r }
 }
 
@@ -463,6 +484,8 @@ function Print({ p }) {
 // =============================================================================================
 export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, onClose = null, closeLabel = 'Stäng', active = true, intro = false, dwell: dwellProp = null, dissolveMs: dissolveProp = null }) {
   const overlay = mode === 'overlay'
+  const tallFill = Math.min(1, Math.max(0.4, Number(param('fill')) || TALL_FILL))   // ?fill=0.85 för att skruva live
+  const fillFor = (W, H) => (intro && W < H ? tallFill : null)   // introt i stående ruta täcker höjden (v0.9.0)
   const debug = param('debug') === '1'
   const fixtur = param('fixtur') === '1'
   const [seed] = useState(() => { const s = Number(param('seed')); return Number.isFinite(s) && s > 0 ? Math.floor(s) : (Date.now() % 1000000000) })
@@ -570,7 +593,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     }
     dwell.current[A.id] = now - lastT.current
     const B = res.B
-    const fa = focusAt(A, W, H), fb = focusAt(B, W, H)
+    const fa = focusAt(A, W, H, fillFor(W, H)), fb = focusAt(B, W, H, fillFor(W, H))
     // Övergång: svart möter svart → hårt klipp; annars dissolve. Skalmatchning: B börjar med ansiktet lika stort
     // som A:s (ögonen på A:s ögon); vidbild öppnar närmare fokus. Under dissolve mjukare skalor.
     // Introt tonar ALLTID (Anders: "tonar över till nästa bild") — dess bilder står på svart, och regeln
@@ -759,8 +782,9 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
   useEffect(() => { if (cur && proofOpen) setProof(proofCache.current[cur.uid] || null) }, [cur])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const { W, H } = size
-  const r = cur && W ? layout(cur, W, H) : null
-  const f = cur && W ? focusAt(cur, W, H) : null
+  const fill = fillFor(W, H)
+  const r = cur && W ? layout(cur, W, H, fill) : null
+  const f = cur && W ? focusAt(cur, W, H, fill) : null
   const mono = { fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.6, color: '#9a9a9a' }
   // Etiketten på skuggsidan (överlägg): kommer ljuset från vänster (90°–270°) är skuggan till höger. I hero alltid vänster.
   const labelSide = overlay && cur && cur.l > 90 && cur.l < 270 ? 'right' : 'left'
@@ -783,7 +807,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
       style={{ position: overlay ? 'fixed' : 'absolute', inset: 0, zIndex: overlay ? 1000 : undefined, background: '#000', overflow: 'hidden', touchAction: overlay ? 'none' : 'pan-y', overscrollBehavior: overlay ? 'none' : undefined, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', cursor: 'default' }}
     >
       {W > 0 && [prev, cur].filter((p, i, arr) => p && arr.indexOf(p) === i).map((p) => {
-        const pr = layout(p, W, H)
+        const pr = layout(p, W, H, fill)
         const isCur = cur && p.id === cur.id
         return (
           <div key={p.id} ref={(el) => { if (el) nodes.current[p.id] = { el, breath: el.firstElementChild }; else delete nodes.current[p.id] }}

@@ -1,4 +1,20 @@
 // Gaahlin Photography — Klippet.jsx
+// v0.8.0 — INTROT (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "bild 1 upp, zoomar och byter snyggt till bild 2
+//   o.s.v. Så det blir introt … inte täcka upp hela skärmen som 'arbeten' gör utan som svartvita bilden … tonar
+//   över till nästa bild. Subtilt, snyggt och professionellt." Verdikt på mockupen: "Bygg detta, vi justerar live.")
+//   Rummet i heron igen (mode="hero", som v0.4–v0.6) men med en egen pool och tre nya props:
+//   • intro — bläddrar i poolens ordning (cutter.step, som överlägget; sekvenseraren kollapsar på tre bilder),
+//     tonar ALLTID (regeln "svart möter svart → hårt klipp" hade klippt där han bett om en övertoning), inga
+//     kapitel (bilder ur olika gallerier utan svart emellan), fast bildtid utan tempo-/närvaroviktning, andning
+//     genom hela bildens tid + dess egen uttoning, och första bilden tänds med sajtens inglidning (1400 ms, EASE).
+//   • dwell / dissolveMs — bildens tid och övertoningens längd i ms (URL-parametrarna ?dwell= och ?dissolve=
+//     vinner, så vi kan skruva live på gaahlin.com utan deploy). Sajten sätter 6000 / 1600 (mockupens värden).
+//   Poolen kommer ur site_content.hero_pool via poolFromSnapshot (nytt, exporterat): samma poolEntry som
+//   fetchPool, så Rummet ser ingen skillnad — men sajten väntar inte på fetchPool, latensen är stillbildens.
+//   Serietiteln/beviset nere till vänster visas inte i introt — hero-metan säger redan Porträtt.
+//   RoomBoundary tar en `fallback`-prop: med den visas fallbacken (stillbilden) i stället för felrapporten, och felet
+//   går till konsolen — sajtens första intryck får aldrig bli en felrapport. Utan propen (överlägget) som förut.
+//   Överlägget och galleriindexet är orörda: allt nytt sitter bakom `intro`, och utan propen är v0.8.0 = v0.7.1.
 // v0.7.1 — ANDNINGEN VÄNDS INÅT (Anders 2026-09-06: "jag vill vända att dom gör exakt samma sak men
 //   istället zoomar dom in"). Rörelsen är oförändrad i allt utom tecknet: samma start i scale(1), samma
 //   varaktighet (bildens dwell, lägst 1500 ms), samma kurva cubic-bezier(.33,0,.67,1), samma ankare —
@@ -94,6 +110,10 @@ class Boundary extends Component {
   constructor(p) { super(p); this.state = { err: null } }
   static getDerivedStateFromError(err) { return { err } }
   render() {
+    if (this.state.err && this.props.fallback !== undefined) {   // heron: sajtens första intryck får aldrig bli en felrapport — stillbilden tar över, felet går till konsolen
+      console.error('Klippet (intro) kraschade — stillbilden visas i stället:', this.state.err)
+      return this.props.fallback
+    }
     if (this.state.err) {
       const e = this.state.err
       return (
@@ -153,25 +173,32 @@ export async function fetchPool(gSlug) {
   let n = 0
   for (const gal of g.data || []) {
     const ims = (gal.images || []).filter((im) => im.storage_path && (gSlug || im.is_public)).sort((a, b) => a.sort_order - b.sort_order)
-    for (const im of ims) {
-      const x = intel[im.id]
-      const face = x && x.faces && x.faces[0]
-      const w = im.width || 3, h = im.height || 2
-      pool.push({
-        id: ++n, uid: im.id, gid: gal.id, s: gal.slug, title: gal.title, imgTitle: im.title || '', r: w / h, url: publicUrl(im.storage_path),
-        f: (x && x.focus && x.focus.length === 2) ? x.focus : NEUTRAL.f,
-        l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
-        sc: face ? face.box[3] : NEUTRAL.sc,
-        m: x && x.tonality && Number.isFinite(x.tonality.mean) ? x.tonality.mean : NEUTRAL.m,
-        sd: x && x.tonality && Number.isFinite(x.tonality.sd) ? x.tonality.sd : NEUTRAL.sd,
-        pw: w, ph: h, alt: (gal.title || '') + (im.title ? ' — ' + im.title : ''),
-        h: x && x.light && Number.isFinite(x.light.hardness) ? x.light.hardness : NEUTRAL.h,
-        e: x && Array.isArray(x.embedding) && x.embedding.length ? x.embedding : null,
-        intel: !!x,
-      })
-    }
+    for (const im of ims) pool.push(poolEntry(++n, im, gal, intel[im.id]))
   }
   return pool
+}
+// Poolposten — EN definition, delad av databasen (fetchPool) och intro-bildspelets ögonblicksbild (poolFromSnapshot).
+function poolEntry(n, im, gal, x) {
+  const face = x && x.faces && x.faces[0]
+  const w = im.width || 3, h = im.height || 2
+  return {
+    id: n, uid: im.id, gid: gal.id, s: gal.slug, title: gal.title, imgTitle: im.title || '', r: w / h, url: publicUrl(im.storage_path),
+    f: (x && x.focus && x.focus.length === 2) ? x.focus : NEUTRAL.f,
+    l: x && x.light && Number.isFinite(x.light.angle) ? x.light.angle : NEUTRAL.l,
+    sc: face && face.box ? face.box[3] : NEUTRAL.sc,
+    m: x && x.tonality && Number.isFinite(x.tonality.mean) ? x.tonality.mean : NEUTRAL.m,
+    sd: x && x.tonality && Number.isFinite(x.tonality.sd) ? x.tonality.sd : NEUTRAL.sd,
+    pw: w, ph: h, alt: (gal.title || '') + (im.title ? ' — ' + im.title : ''),
+    h: x && x.light && Number.isFinite(x.light.hardness) ? x.light.hardness : NEUTRAL.h,
+    e: x && Array.isArray(x.embedding) && x.embedding.length ? x.embedding : null,
+    intel: !!x,
+  }
+}
+// Intro-bildspelets pool ur site_content.hero_pool (parseHeroPool i lib/siteContent): ingen databasfråga, inga
+// väntetider — sajten har redan inväntat site_content. Ordningen är adminets. Embedding finns inte i
+// ögonblicksbilden och behövs inte: introt bläddrar i ordning (cutter.step), det poängsätter inte.
+export function poolFromSnapshot(list) {
+  return (list || []).map((e, i) => poolEntry(i + 1, e.im, e.gal || { id: null, slug: 'intro', title: '' }, e.x || null))
 }
 // Kanternas luminans (0..1) ur en laddad bild — avgör om bilden står på svart. null om canvas inte får läsa.
 function edgeLuminance(img) {
@@ -231,6 +258,7 @@ const DISSOLVE_MATCH = [0.85, 1.2]   // skalmatchning under dissolve, mjukare
 const PANO_IN_SOFT = 1.12
 const FADE_OUT_MS = 500, FADE_GAP_MS = 150, FADE_IN_MS = 900   // genom svart vid kapitelbyte
 const OPEN_FADE_MS = 900
+const INTRO_OPEN_MS = 1400  // introts första bild: sajtens inglidning (index.css v0.5.0 / PublicSite v0.11.0)
 const EDGE_DARK = 0.08      // kanternas luminans under detta = "på svart"
 const BREATH = 0.05         // andningen: 5 % INÅT under bildens tid (3 % på oanalyserad bild)
 const CHAPTER_MS = 120      // kapitelandningen: svart vid gallerbyte
@@ -424,12 +452,13 @@ function Print({ p }) {
 // =============================================================================================
 // Rummet
 // =============================================================================================
-export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, onClose = null, closeLabel = 'Stäng', active = true }) {
+export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, onClose = null, closeLabel = 'Stäng', active = true, intro = false, dwell: dwellProp = null, dissolveMs: dissolveProp = null }) {
   const overlay = mode === 'overlay'
   const debug = param('debug') === '1'
   const fixtur = param('fixtur') === '1'
   const [seed] = useState(() => { const s = Number(param('seed')); return Number.isFinite(s) && s > 0 ? Math.floor(s) : (Date.now() % 1000000000) })
-  const dwellMs = Math.max(400, Number(param('dwell')) || DWELL_DEFAULT)
+  const dwellMs = Math.max(400, Number(param('dwell')) || dwellProp || DWELL_DEFAULT)
+  const dissolveMs = Math.max(200, Number(param('dissolve')) || dissolveProp || DISSOLVE_MS)   // ?dissolve=1600 för att skruva live
   const reduced = q('(prefers-reduced-motion: reduce)')
   const [pool, setPool] = useState(null)          // null = hämtas
   const [source, setSource] = useState('')        // 'db' | 'fixtur' (+ orsak)
@@ -522,22 +551,28 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     // (Sekvenseraren cutter.next är byggd för hundra bilder; på sju kollapsar den till samma par —
     //  N = floor(7/2) = 3 blockerar bara tre reprisser och bruset är ±0,1 mot regler värda 2–3 poäng.
     //  Anders 2026-09-06: "det skall gå från den man klickar på och medurs genom bilderna".)
-    const res = overlay
+    // Introt bläddrar också i ordning — adminets ordning är filmen.
+    const res = (overlay || intro)
       ? cutter.step(A, dir)
       : cutter.next(A, W, H, { ...dwell.current, [A.id]: now - lastT.current }, (B) => loaded.current.has(B.id))
-    if (!res) { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), 250); return }   // inget laddat än — försök strax igen
+    if (!res) {   // sekvens (överlägg/intro): null = ingen annan bild finns, inget att vänta på. Poängsättning: inget laddat än — försök strax igen.
+      if (!(overlay || intro)) { clearTimeout(timer.current); timer.current = setTimeout(() => cutRef.current(), 250) }
+      return
+    }
     dwell.current[A.id] = now - lastT.current
     const B = res.B
     const fa = focusAt(A, W, H), fb = focusAt(B, W, H)
     // Övergång: svart möter svart → hårt klipp; annars dissolve. Skalmatchning: B börjar med ansiktet lika stort
     // som A:s (ögonen på A:s ögon); vidbild öppnar närmare fokus. Under dissolve mjukare skalor.
-    const dissolve = !(isDark(A) && isDark(B)) && !reduced
+    // Introt tonar ALLTID (Anders: "tonar över till nästa bild") — dess bilder står på svart, och regeln
+    // "svart möter svart → hårt klipp" hade gett ett klipp där han bett om en övertoning.
+    const dissolve = (intro || !(isDark(A) && isDark(B))) && !reduced
     const [mMin, mMax] = dissolve ? DISSOLVE_MATCH : [MATCH_MIN, MATCH_MAX]
     let s0 = 1
     if (A.sc > 0 && B.sc > 0) s0 = Math.max(mMin, Math.min(mMax, (A.sc * fa.r.h) / (B.sc * fb.r.h)))
     else if (!(B.sc > 0)) s0 = dissolve ? PANO_IN_SOFT : PANO_IN
-    const chapter = A.s !== B.s
-    const pd = { A, B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y, s0, chapter, dissolve, fadeIn: dissolve ? (chapter ? FADE_IN_MS : DISSOLVE_MS) : 0 }
+    const chapter = !intro && A.s !== B.s   // introt har inga kapitel: bilderna får komma ur olika gallerier utan svart emellan
+    const pd = { A, B, fa, fb, dx: fa.x - fb.x, dy: fa.y - fb.y, s0, chapter, dissolve, fadeIn: dissolve ? (chapter ? FADE_IN_MS : dissolveMs) : 0 }
     lastT.current = now
     lastCut.current = now
     if (manual) {   // besökarens takt: EMA av intervallen mellan manuella klipp
@@ -551,7 +586,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
       pending.current = pd
       setBlank(false)
       clearTimeout(prevTimer.current)
-      if (dissolve && !chapter) { setPrev(A); prevTimer.current = setTimeout(() => setPrev(null), DISSOLVE_MS + 80) }
+      if (dissolve && !chapter) { setPrev(A); prevTimer.current = setTimeout(() => setPrev(null), dissolveMs + 80) }
       else setPrev(null)
       setCur(B)
       setTrace({ ...res, glide: Math.hypot(pd.dx, pd.dy), s0, chapter, mode: dissolve ? (chapter ? 'genom svart' : 'dissolve') : (chapter ? 'klipp · kapitel' : 'klipp') })
@@ -596,7 +631,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     if (rg) { rg.style.transition = 'none'; rg.style.left = pd.fa.x + 'px'; rg.style.top = pd.fa.y + 'px' }
     void el.offsetWidth
     if (typeof window.__klippetOnCut === 'function') window.__klippetOnCut({ el, A: pd.A, B: pd.B, fa: pd.fa, fb: pd.fb, dx: pd.dx, dy: pd.dy, s0: pd.s0, chapter: pd.chapter, dissolve: pd.dissolve, ms })
-    breathe(pd.B, dwellFor(pd.B, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0))
+    breathe(pd.B, intro ? dwellMs + dissolveMs : dwellFor(pd.B, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0))   // introt: andas genom sin egen uttoning
     const a = pd.dissolve && !pd.chapter ? nodes.current[pd.A.id] : null
     requestAnimationFrame(() => {
       el.style.transition = reduced ? 'none' : `transform ${ms}ms ${ease}, opacity ${ms}ms ${ease}`
@@ -611,14 +646,16 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     })
   }, [cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
   // Öppningsbilden: tonas in om den har bakgrund, tänds direkt på svart; andas.
+  // Introt tänds med sajtens egen inglidning (1400 ms, EASE) — samma som stillbilden hade, oavsett svart.
   useLayoutEffect(() => {
     if (!cur || cutNo !== 0) return
     const n = nodes.current[cur.id]
-    if (n && n.el && !reduced && !isDark(cur)) {
+    if (n && n.el && !reduced && (intro || !isDark(cur))) {
       n.el.style.transition = 'none'; n.el.style.opacity = '0'; void n.el.offsetWidth
-      requestAnimationFrame(() => { n.el.style.transition = `opacity ${OPEN_FADE_MS}ms ${DISSOLVE_EASE}`; n.el.style.opacity = '1' })
+      const ms = intro ? INTRO_OPEN_MS : OPEN_FADE_MS, ease = intro ? EASE : DISSOLVE_EASE
+      requestAnimationFrame(() => { n.el.style.transition = `opacity ${ms}ms ${ease}`; n.el.style.opacity = '1' })
     }
-    breathe(cur, dwellFor(cur, dwellMs, 1, cutter ? cutter.maxP : 0))
+    breathe(cur, intro ? dwellMs + dissolveMs : dwellFor(cur, dwellMs, 1, cutter ? cutter.maxP : 0))
   }, [cur, cutNo])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filmen — dwell-styrd, med klipparens tempo. Rörelse över bilden håller; närmare håller; en besökare som
@@ -633,7 +670,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     if (overlay && !AUTOPLAY_IN_OVERLAY) return   // besökaren bläddrar själv — bilden flyttar sig inte under honom
     if (holdRef.current || !activeRef.current || !inViewRef.current) return
     const p = curRef.current
-    timer.current = setTimeout(() => cutRef.current(false), p ? dwellFor(p, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0) : dwellMs)
+    timer.current = setTimeout(() => cutRef.current(false), intro || !p ? dwellMs : dwellFor(p, dwellMs, tempoRef2.current, cutter ? cutter.maxP : 0))   // introt: fast tid
   }
   useEffect(() => { if (!cur) return; schedule(); return () => clearTimeout(timer.current) }, [cur, tempo, active])   // eslint-disable-line react-hooks/exhaustive-deps
   // Hero: pausa när sektionen inte syns (scrollad förbi).
@@ -759,7 +796,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
           {closeLabel}
         </button>
       )}
-      {cur && (
+      {cur && !intro && (   // introt: hero-metan säger redan Porträtt — ingen andra etikett, inget bevis i heron
         <button type="button" onClick={toggleProof} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} aria-expanded={proofOpen}
           style={{ position: 'absolute', bottom: overlay ? 16 : '3rem', [labelSide]: overlay ? 18 : '3rem', background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 9, letterSpacing: '.35em', textTransform: 'uppercase', color: proofOpen ? '#fff' : 'rgba(255,255,255,.45)', cursor: cur.url ? 'pointer' : 'default', textAlign: labelSide === 'right' ? 'right' : 'left', zIndex: 3 }}>
           {cur.title || `Serie ${cur.s}`}{debug ? ` · ${cur.uid ? 'bild' : 'print'} ${cur.id}${cur.intel === false ? ' · oanalyserad' : ''}` : ''}
@@ -804,7 +841,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
               (trace ? ` · ${trace.mode} · glid ${Math.round(trace.glide)} px · skala ${trace.s0.toFixed(2)} · ${reduced ? 0 : trace.mode.startsWith('klipp') ? GLIDE_MS : trace.mode === 'genom svart' ? FADE_IN_MS : DISSOLVE_MS} ms` : ' · öppning') +
               ` · dwell ${dwellMs} ms · seed ${seed} · ${Math.round(W)}×${Math.round(H)}`}
           </div>
-          <div>{`${mode} · pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade${!active ? ' · pausad' : !inView ? ' · utanför rutan' : ''}`}</div>
+          <div>{`${mode}${intro ? ' · intro' : ''} · pool ${source} · ${pool ? pool.length : 0} bilder · ${loadedCount} laddade · ${pool ? pool.filter((p) => p.intel).length : 0} analyserade${!active ? ' · pausad' : !inView ? ' · utanför rutan' : ''}`}</div>
           <div>{`tempo ×${tempo.toFixed(2)} · dwell för bilden ${dwellFor(cur, dwellMs, tempo, cutter ? cutter.maxP : 0)} ms · hänglinje ${Math.round(HANG * 100)} % (ögon på ${r ? Math.round(((r.y + cur.f[1] * r.h) / H) * 100) : '–'} %) · kant ${Number.isFinite(cur.edge) ? (cur.edge * 100).toFixed(0) + ' %' : '–'} ${isDark(cur) ? 'svart' : 'bakgrund'} · andning +${Math.round((cur.sc > 0 ? BREATH : BREATH * 0.6) * 100)} % inåt mot ${cur.l}° · närvaro ${presence(cur).toFixed(2)} · närmare ${closer || '–'}${proofOpen ? ' · bevis öppet' : ''}`}</div>
           <div>{cutter ? cutter.seq().map((p) => p.id).join(' → ') : ''}</div>
           {trace && <div>{`${trace.score.toFixed(1)} p: ` + trace.parts.map(([n, v]) => `${n} ${v >= 0 ? '+' : ''}${v.toFixed(1)}`).join(' · ')}</div>}

@@ -1,4 +1,12 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.16.0 — INTRO-BILDSPELET (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "då måste du även göra om i admin så att
+//   jag kan byta eller lägga till bilder i bildspelet"). Innehåll → Hero → Intro-bildspel: en väljare (HeroPoolPicker)
+//   som visar biblioteket — publika bilder i publika gallerier, sajtens egna regler — som miniatyrer; klick lägger
+//   till/tar bort, ‹ › flyttar, × tar bort. Värdet är site_content.hero_pool: en JSON-ögonblicksbild av det Rummet
+//   behöver per bild (bildrad, galleri, intelligensens siffror ur Analys), i ordning. Byggs om ur biblioteket vid
+//   varje ändring; bilder som saknas i biblioteket markeras och faller bort. "ej analyserad" visas där ögonen inte
+//   är kända — övertoningen kan då inte matcha dem (kör Analys). Sparas med Innehålls Spara-knapp som förut.
+//   Fältet 'hero_image' heter nu "Stillbild" (visas när bildspelet är tomt). Schema i lib/siteContent.js v0.2.0.
 // v0.15.0 — Seendet utbrutet till src/lib/seeing.js (MediaPipe-konstanter, loadLandmarker, parseFaces/headPose,
 //   blickregeln) så att rummets kamera (Klippet v0.3.0) och Analys delar samma definition av "blick". Ingen
 //   ändring i Analys logik; app-versionen i models blir v0.15.0.
@@ -32,7 +40,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { FIELDS, GROUPS, LOCALES, NEUTRAL, DEFAULTS, fetchSiteContent, publicImageUrl } from '../lib/siteContent'
+import { FIELDS, GROUPS, LOCALES, NEUTRAL, DEFAULTS, fetchSiteContent, publicImageUrl, parseHeroPool, serializeHeroPool } from '../lib/siteContent'
 import { MP_VERSION, loadLandmarker, parseFaces, r3, EYE_DEG } from '../lib/seeing'
 
 const BUCKET = 'gaahlin-public'
@@ -787,6 +795,126 @@ function Kontakter() {
 
 const LOCALE_LABEL = { sv: 'Svenska', no: 'Norsk', dk: 'Dansk', fi: 'Suomi', en: 'English' }
 
+/* Intro-bildspelet (Innehåll → Hero → Intro-bildspel). Värdet är site_content.hero_pool: en JSON-ögonblicksbild av
+   precis det Rummet behöver per bild (bildrad, galleri, intelligensens siffror), i visningsordning. Biblioteket är
+   sajtens egna regler: publika bilder i publika gallerier. Varje ändring bygger om hela ögonblicksbilden ur
+   biblioteket, så siffrorna är alltid de senaste ur Analys. Bilder som försvunnit ur biblioteket visas som
+   "saknas" och faller bort vid nästa ändring. Sparas med resten av Innehåll (Spara-knappen). */
+const compactIntel = (x) => x ? {
+  faces: Array.isArray(x.faces) && x.faces[0] && x.faces[0].box ? [{ box: x.faces[0].box }] : [],
+  focus: Array.isArray(x.focus) && x.focus.length === 2 ? x.focus : null,
+  tonality: x.tonality ? { mean: x.tonality.mean, sd: x.tonality.sd } : null,
+  light: x.light ? { angle: x.light.angle, hardness: x.light.hardness } : null,
+} : null
+
+function HeroPoolPicker({ value, onChange, disabled }) {
+  const [lib, setLib] = useState(null)    // { rows: [{ im, gal, x }], byId }
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const g = await supabase.from('galleries').select('id, slug, title, sort_order, is_public, images(id, storage_path, width, height, sort_order, is_public, title)').order('sort_order')
+      if (g.error) { if (alive) setError(g.error.message); return }
+      const ii = await supabase.from('image_intelligence').select('image_id, faces, focus, tonality, light')
+      const intel = {}
+      if (!ii.error) for (const r of ii.data || []) intel[r.image_id] = r
+      const rows = []
+      for (const gal of g.data || []) {
+        if (!gal.is_public) continue
+        const ims = (gal.images || []).filter((im) => im.storage_path && im.is_public).sort((a, b) => a.sort_order - b.sort_order)
+        for (const im of ims) rows.push({ im: { id: im.id, storage_path: im.storage_path, width: im.width, height: im.height, title: im.title || '' }, gal: { id: gal.id, slug: gal.slug, title: gal.title }, x: compactIntel(intel[im.id]) })
+      }
+      const byId = {}
+      for (const r of rows) byId[r.im.id] = r
+      if (alive) setLib({ rows, byId })
+    })()
+    return () => { alive = false }
+  }, [])
+
+  const sel = parseHeroPool(value)
+  const ids = sel.map((e) => e.im.id)
+  const commit = (nextIds) => {
+    if (!lib) return
+    onChange(serializeHeroPool(nextIds.map((id) => lib.byId[id]).filter(Boolean)))
+  }
+  const add = (id) => { if (!ids.includes(id)) commit([...ids, id]) }
+  const remove = (id) => commit(ids.filter((x) => x !== id))
+  const move = (id, dir) => {
+    const i = ids.indexOf(id), j = i + dir
+    if (i < 0 || j < 0 || j >= ids.length) return
+    const n = ids.slice(); n[i] = ids[j]; n[j] = ids[i]; commit(n)
+  }
+
+  const thumb = (path) => publicImageUrl(path)
+  const tiny = { ...ui.ghost, padding: '4px 8px', fontSize: '12px', lineHeight: 1 }
+  const dot = (ok, text) => <span title={text} style={{ fontSize: '10px', letterSpacing: '0.06em', color: ok ? '#7ec699' : '#d8b878' }}>{ok ? '● analyserad' : '○ ej analyserad'}</span>
+
+  if (error) return <p style={ui.err}>Biblioteket kunde inte läsas: {error}</p>
+  if (!lib) return <p style={{ ...ui.muted, fontSize: '13px' }}>Läser biblioteket…</p>
+
+  const groups = []
+  for (const r of lib.rows) { let g = groups.find((x) => x.gal.id === r.gal.id); if (!g) { g = { gal: r.gal, rows: [] }; groups.push(g) } g.rows.push(r) }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div>
+        <span style={ui.label}>Bildspelet — {sel.length ? `${sel.length} bild${sel.length === 1 ? '' : 'er'} i ordning` : 'tomt ⇒ stillbilden visas'}</span>
+        {sel.length > 0 && (
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {sel.map((e, i) => {
+              const live = lib.byId[e.im.id]
+              return (
+                <div key={e.im.id} style={{ width: '168px', background: '#0f0f0f', border: '1px solid ' + (live ? '#242424' : '#5a3a2e'), borderRadius: '8px', padding: '8px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <img src={thumb(e.im.storage_path)} alt="" style={{ width: '152px', height: '96px', objectFit: 'cover', borderRadius: '5px', background: '#111', display: 'block' }} />
+                    <span style={{ position: 'absolute', top: '6px', left: '6px', background: 'rgba(0,0,0,.7)', color: '#fff', fontSize: '11px', padding: '2px 7px', borderRadius: '10px' }}>{i + 1}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', gap: '4px' }}>
+                    {live ? dot(!!(live.x && live.x.focus), live.x && live.x.focus ? 'Ögonen är kända — övertoningen matchar dem' : 'Kör Analys på bilden så matchar övertoningen ögonen') : <span style={{ fontSize: '10px', color: '#d8b878' }}>saknas i biblioteket</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                    <button style={tiny} onClick={() => move(e.im.id, -1)} disabled={disabled || i === 0} title="Tidigare">‹</button>
+                    <button style={tiny} onClick={() => move(e.im.id, 1)} disabled={disabled || i === sel.length - 1} title="Senare">›</button>
+                    <span style={{ flex: 1 }} />
+                    <button style={{ ...tiny, color: '#c99' }} onClick={() => remove(e.im.id)} disabled={disabled} title="Ta bort ur bildspelet">×</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <div>
+        <span style={ui.label}>Biblioteket — klicka för att lägga till (publika bilder i publika gallerier)</span>
+        {groups.length === 0 && <p style={{ ...ui.muted, fontSize: '13px' }}>Inga publika bilder ännu. Lägg upp i Bilder &amp; gallerier först.</p>}
+        {groups.map((g) => (
+          <div key={g.gal.id} style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '12px', color: '#999', margin: '6px 0' }}>{g.gal.title || g.gal.slug}</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {g.rows.map((r) => {
+                const on = ids.includes(r.im.id)
+                return (
+                  <button
+                    key={r.im.id}
+                    onClick={() => (on ? remove(r.im.id) : add(r.im.id))}
+                    disabled={disabled}
+                    title={on ? 'Ta bort ur bildspelet' : (r.x && r.x.focus ? 'Lägg till' : 'Lägg till (ej analyserad — övertoningen kan inte matcha ögonen)')}
+                    style={{ position: 'relative', padding: 0, border: '2px solid ' + (on ? '#fff' : 'transparent'), borderRadius: '6px', background: 'none', cursor: disabled ? 'default' : 'pointer', opacity: on ? 1 : 0.85 }}
+                  >
+                    <img src={thumb(r.im.storage_path)} alt="" style={{ width: '104px', height: '66px', objectFit: 'cover', borderRadius: '4px', background: '#111', display: 'block' }} />
+                    {on && <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#fff', color: '#000', fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{ids.indexOf(r.im.id) + 1}</span>}
+                    {!(r.x && r.x.focus) && <span style={{ position: 'absolute', bottom: '4px', left: '4px', fontSize: '9px', color: '#d8b878', background: 'rgba(0,0,0,.7)', padding: '1px 5px', borderRadius: '6px' }}>ej analyserad</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SiteContentEditor() {
   const [db, setDb] = useState(null)        // sparat läge, { [locale]: { [key]: value } }
   const [draft, setDraft] = useState({})    // { 'locale|key': value } — bara ändrade celler
@@ -868,6 +996,16 @@ function SiteContentEditor() {
         {dirty && <span style={{ fontSize: '11px', color: '#d8b878' }}>ändrad</span>}
       </div>
     )
+
+    if (f.kind === 'pool') {
+      return (
+        <div key={f.key} style={{ marginBottom: '26px' }}>
+          {label}
+          <HeroPoolPicker value={value} onChange={(v) => setValue(loc, f.key, v)} disabled={busy} />
+          {f.hint && <div style={{ ...ui.muted, fontSize: '12px', marginTop: '10px', maxWidth: '560px', lineHeight: 1.5 }}>{f.hint}</div>}
+        </div>
+      )
+    }
 
     if (f.kind === 'image') {
       const src = value ? publicImageUrl(value) : (f.key === 'hero_image' ? '/images/intro/me_bw.jpg' : '/images/about/me.jpg')

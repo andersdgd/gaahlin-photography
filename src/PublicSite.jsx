@@ -1,4 +1,6 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.12.3 — loggan som inline-SVG (src/Logo.jsx) i stället för <img> mot en fil i public/ — pubg lämnade FILE:-raden
+//   kvar i den filen (ogiltig XML, tom logga). Ingen fil, ingen extra begäran. public/logo/ kan git rm:as.
 // v0.12.2 — loggan ligger i public/logo/ (dit pubg skrev den 2026-09-12, commit 94de882), inte public/images/logo/.
 //   Sökvägen pekar dit. Inget annat ändrat.
 // v0.12.1 — LOGGAN (Anders 2026-09-12: "detta är min logga. Kan du använda denna och byta ut texten som står uppe i
@@ -70,6 +72,7 @@ import './index.css'
 import { supabase } from './lib/supabase'
 import { fetchSiteContent, resolveContent, publicImageUrl, parseHeroPool } from './lib/siteContent'
 import { Room, RoomBoundary, fetchPool, poolFromSnapshot } from './Klippet'
+import Logo from './Logo'
 
 // === Galleri-layout: justerade rader ===
 // Antal bilder per rad beror på viewport (speglar brytpunkterna i index.css).
@@ -436,7 +439,7 @@ export default function PublicSite() {
   return (
     <div id="page-wrap" className={loaded ? 'loaded' : ''}>
       <nav id="mainNav" className={scrolled ? 'scrolled' : ''}>
-        <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><img src="/logo/gaahlin-photography.svg" alt="Gaahlin Photography" width="2861" height="188" decoding="async" /></a>
+        <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><Logo /></a>
         <ul className="nav-links">
           <li><a href="#gallery">{t.nav_work}</a></li>
           <li><a href="#about">{t.nav_about}</a></li>

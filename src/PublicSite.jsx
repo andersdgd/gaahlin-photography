@@ -1,4 +1,6 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.12.2 — loggan ligger i public/logo/ (dit pubg skrev den 2026-09-12, commit 94de882), inte public/images/logo/.
+//   Sökvägen pekar dit. Inget annat ändrat.
 // v0.12.1 — LOGGAN (Anders 2026-09-12: "detta är min logga. Kan du använda denna och byta ut texten som står uppe i
 //   vänstra hörnet. men du måste extrahera och invertera så den blir vit"). Ordmärket "Gaahlin" i Cormorant ersatt av
 //   Anders egen logotyp, vektoriserad ur hans PNG (bläcket spårat, vit fyllning, genomskinlig bakgrund):
@@ -434,7 +436,7 @@ export default function PublicSite() {
   return (
     <div id="page-wrap" className={loaded ? 'loaded' : ''}>
       <nav id="mainNav" className={scrolled ? 'scrolled' : ''}>
-        <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><img src="/images/logo/gaahlin-photography.svg" alt="Gaahlin Photography" width="2861" height="188" decoding="async" /></a>
+        <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><img src="/logo/gaahlin-photography.svg" alt="Gaahlin Photography" width="2861" height="188" decoding="async" /></a>
         <ul className="nav-links">
           <li><a href="#gallery">{t.nav_work}</a></li>
           <li><a href="#about">{t.nav_about}</a></li>

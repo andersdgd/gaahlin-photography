@@ -1,4 +1,10 @@
 /* Gaahlin Photography — global stylesheet
+   v0.6.3 — NAVET STÅR STILL OCH ÄR AV GLAS (Anders 2026-09-12: "navigeringen rör marginellt på sig när jag börjar
+   scrolla … snyggare om bakgrunden inte övergår till svart utan suddig/dimming som lite isat glas"). Rörelsen var
+   .scrolled:s paddingbyte 1,8 → 1,2 rem med transition — borttaget, paddingen är konstant (på mobil tappade den
+   regeln dessutom safe-area-marginalen). Bakgrunden var 95 % svart så blur(10px) aldrig syntes: nu 45 % svart,
+   blur(20px) saturate(1.2) och en hårfin ljus linje i underkant som ger glaset en kant. backdrop-filter på nav är
+   tillåtet (§6: UI-yta, inte ett foto).
    v0.6.2 — loggan är en inline-SVG (src/Logo.jsx): .nav-logo svg i stället för .nav-logo img, samma mått.
    v0.6.1 — LOGGAN: .nav-logo är en bild (Anders vektoriserade logotyp, /images/logo/gaahlin-photography.svg) i
    stället för ordmärket i Cormorant. 14 px hög på dator (≈213 px bred), 12 px på mobil (≈183 px). Typsnittsreglerna
@@ -31,8 +37,8 @@ html{scroll-behavior:smooth;background:#000}
 body{background:#000;color:#fff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.8rem 3rem;transition:padding .4s,background .4s}
-nav.scrolled{padding:1.2rem 3rem;background:rgba(0,0,0,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.8rem 3rem;border-bottom:1px solid transparent;transition:background .4s,border-color .4s}
+nav.scrolled{background:rgba(0,0,0,.45);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);border-bottom-color:rgba(255,255,255,.07)}
 .nav-logo{display:block;line-height:0;color:#fff;text-decoration:none}
 .nav-logo svg{height:14px;width:auto;display:block}
 .nav-links{display:flex;gap:2.5rem;list-style:none}
@@ -165,7 +171,6 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 }
 @media(max-width:600px){
 nav{padding:1.2rem 1.5rem;padding-top:calc(1.2rem + env(safe-area-inset-top))}
-nav.scrolled{padding:.9rem 1.5rem}
 .nav-logo svg{height:12px}
 #gallery,#contact,#statement{padding-left:1.5rem;padding-right:1.5rem}
 .about-content{padding:3rem 1.5rem}

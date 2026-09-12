@@ -1,4 +1,9 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.12.1 — LOGGAN (Anders 2026-09-12: "detta är min logga. Kan du använda denna och byta ut texten som står uppe i
+//   vänstra hörnet. men du måste extrahera och invertera så den blir vit"). Ordmärket "Gaahlin" i Cormorant ersatt av
+//   Anders egen logotyp, vektoriserad ur hans PNG (bläcket spårat, vit fyllning, genomskinlig bakgrund):
+//   /images/logo/gaahlin-photography.svg (viewBox 2861×188). width/height-attributen ger proportionen innan filen
+//   laddats så navet inte hoppar; storleken sätts i index.css v0.6.1 (.nav-logo img: 14 px hög, 12 px på mobil).
 // v0.12.0 — INTROT (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "byt ut HERO-bilden av mig i svartvitt och skapa
 //   exakt samma sak som porträttgalleriet istället … bild 1 upp, zoomar och byter snyggt till bild 2 o.s.v. … inte
 //   täcka upp hela skärmen som 'arbeten' gör utan som svartvita bilden … tonar över till nästa bild. Subtilt,
@@ -429,7 +434,7 @@ export default function PublicSite() {
   return (
     <div id="page-wrap" className={loaded ? 'loaded' : ''}>
       <nav id="mainNav" className={scrolled ? 'scrolled' : ''}>
-        <a href="#hero" className="nav-logo">Gaahlin</a>
+        <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><img src="/images/logo/gaahlin-photography.svg" alt="Gaahlin Photography" width="2861" height="188" decoding="async" /></a>
         <ul className="nav-links">
           <li><a href="#gallery">{t.nav_work}</a></li>
           <li><a href="#about">{t.nav_about}</a></li>

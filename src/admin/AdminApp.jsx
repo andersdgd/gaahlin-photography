@@ -1,4 +1,9 @@
 // Gaahlin Photography — admin/AdminApp.jsx
+// v0.16.1 — ADRESSEN FÖLJER NAMNET (Anders 2026-09-12: "när jag skapar ett galleri med ett namn så går det inte att ändra
+//   senare. Döpte om 'Portraits' till 'Intro' men det ändras inte."). Databasen visade title = 'Intro', slug = 'portraits':
+//   omdöpningen sparade titeln men adressen skapades bara vid nyskapande och följde aldrig med — och adminet visar den
+//   under namnet, så det såg ut som att inget hänt. Sajten använder aldrig adressen (bara id och titel), så den kan följa
+//   namnet fritt; den är unik i databasen, därför löpnummer vid krock (intro, intro-2 …) och ett andra försök vid 23505.
 // v0.16.0 — INTRO-BILDSPELET (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "då måste du även göra om i admin så att
 //   jag kan byta eller lägga till bilder i bildspelet"). Innehåll → Hero → Intro-bildspel: en väljare (HeroPoolPicker)
 //   som visar biblioteket — publika bilder i publika gallerier, sajtens egna regler — som miniatyrer; klick lägger
@@ -1236,14 +1241,28 @@ function GalleryManager() {
   // Inline-redigering ersätter window.prompt.
   const startEdit = (g) => { setEditingId(g.id); setEditTitle(g.title) }
   const cancelEdit = () => { setEditingId(null); setEditTitle('') }
+  // Adressen (slug) följer namnet (Anders 2026-09-12: "döpte om 'Portraits' till 'Intro' men det ändras inte" — titeln
+  // sparades, adressen stod kvar). Den har ingen publik roll — sajten visar den aldrig — men den är unik i databasen
+  // (galleries_slug_key), så en krock med ett annat galleri får ett löpnummer: intro, intro-2, intro-3 …
+  const freeSlug = (base, ownId) => {
+    const taken = (x) => (galleries || []).some((g) => g.id !== ownId && g.slug === x)
+    let candidate = base, n = 2
+    while (taken(candidate)) candidate = `${base}-${n++}`
+    return candidate
+  }
   const saveEdit = async (g) => {
     const t = editTitle.trim()
     if (!t || busy) return
     setBusy(true); setError('')
-    const { error } = await supabase.from('galleries').update({ title: t }).eq('id', g.id)
+    let slug = freeSlug(slugify(t) || g.slug, g.id)
+    let { error } = await supabase.from('galleries').update({ title: t, slug }).eq('id', g.id)
+    if (error && error.code === '23505') {   // unik-krock trots kontrollen (galleri skapat i annan flik) — ett löpnummer till, en gång
+      slug = `${slug}-${Date.now() % 1000}`
+      ;({ error } = await supabase.from('galleries').update({ title: t, slug }).eq('id', g.id))
+    }
     setBusy(false)
     if (error) { setError(error.message); return }
-    setGalleries((gs) => gs.map((x) => (x.id === g.id ? { ...x, title: t } : x)))
+    setGalleries((gs) => gs.map((x) => (x.id === g.id ? { ...x, title: t, slug } : x)))
     cancelEdit()
   }
 

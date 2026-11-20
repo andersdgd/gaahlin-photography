@@ -1,4 +1,14 @@
 // Gaahlin Photography — Klippet.jsx
+// v0.9.1 — EN LADDNING FÅR ALDRIG TAPPAS (Anders 2026-09-15: "bildspelet börjar inte när jag öppnar sidan. Det händer
+//   inget. Klickar jag startar det."). Introt öppnar när bild 1 är laddad (v0.8.1). Laddar bild 1 aldrig — vilket
+//   kan hända tyst: Safari serverar gärna en bild ur cachen utan CORS-huvuden om den först laddats som vanlig <img>
+//   (miniatyr i adminet), och den CORS-märkta förladdningen faller då på onerror, eller på en smittad canvas i
+//   edgeLuminance som kastade INUTI onload så att lyssnarna aldrig anropades — öppnade introt aldrig. Ett klick
+//   gick runt det (klippet utgår från bild 1 i sekvensen och visar bild 2). Bild 1 i produktion var omladdad
+//   2026-09-12 16:10, vilket passar. Fix i preload(): try/catch runt kantmätningen; faller CORS-laddningen laddas
+//   bilden en gång till utan CORS (p.cors=false, kanten ur tonaliteten som fixturerna), och rummets <img> sätter
+//   crossOrigin bara när förladdningen lyckades med CORS. Bänk: bild 1 serverad UTAN CORS-huvud ⇒ v0.9.0 öppnar
+//   aldrig (röd), v0.9.1 öppnar på bild 1 via fallbacken (grön); normala bilder oförändrade.
 // v0.9.0 — INTROT PÅ MOBIL TÄCKER HÖJDEN (Anders 2026-09-10: "på mobilen blir ansiktena så små att effekten/zoomningen
 //   inte ens syns. Kan vi på iphone göra bildspelet större så att det täcker upp snyggare. Detta är enbart på mobilen.")
 //   layout(p, W, H, fill): i introt och en stående ruta (W < H) får en bild som är bredare än rutan täcka fill·H av
@@ -241,14 +251,26 @@ const preloads = new Map()   // url → { done, ok, edge, listeners }
 function preload(p, onDone) {
   let e = preloads.get(p.url)
   if (!e) {
-    e = { done: false, ok: false, edge: null, listeners: [] }
+    e = { done: false, ok: false, edge: null, cors: true, listeners: [] }
     preloads.set(p.url, e)
-    const im = new Image()
-    im.crossOrigin = 'anonymous'   // samma CORS-läge som <img> i rummet → en hämtning, och kanterna får läsas
-    im.decoding = 'async'
-    im.onload = () => { e.done = true; e.ok = true; e.edge = edgeLuminance(im); e.listeners.splice(0).forEach((f) => f(e)) }
-    im.onerror = () => { e.done = true; e.ok = false; e.listeners.splice(0).forEach((f) => f(e)) }
-    im.src = p.url
+    const finish = (ok, edge, cors) => { e.done = true; e.ok = ok; e.edge = edge; e.cors = cors; e.listeners.splice(0).forEach((f) => f(e)) }
+    // Två lägen (v0.9.1). Först med CORS — samma läge som <img> i rummet, en hämtning, och kanterna får läsas.
+    // Faller det (Safari serverar gärna en bild ur cachen UTAN CORS-huvuden om den först laddats som vanlig <img>,
+    // t.ex. som miniatyr i adminet — då misslyckas den CORS-märkta laddningen tyst) laddas bilden en gång till
+    // utan CORS: den visas, kanten uppskattas ur tonaliteten, och introt öppnar. En laddning får aldrig tappas.
+    const load = (cors) => {
+      const im = new Image()
+      if (cors) im.crossOrigin = 'anonymous'
+      im.decoding = 'async'
+      im.onload = () => {
+        let edge = null
+        if (cors) { try { edge = edgeLuminance(im) } catch (err) { edge = null } }   // smittad canvas ⇒ okänd kant, men laddad
+        finish(true, edge, cors)
+      }
+      im.onerror = () => { if (cors) load(false); else finish(false, null, false) }
+      im.src = p.url
+    }
+    load(true)
   }
   if (e.done) onDone(e)
   else e.listeners.push(onDone)
@@ -559,7 +581,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
     let alive = true
     const offs = pool.map((p) => preload(p, (e) => {
       if (!alive) return
-      if (e.ok) { p.edge = e.edge; loaded.current.add(p.id); setLoadedCount(loaded.current.size) }
+      if (e.ok) { p.edge = e.edge != null ? e.edge : 0.157 * p.m; p.cors = e.cors; loaded.current.add(p.id); setLoadedCount(loaded.current.size) }   // okänd kant ⇒ ur tonaliteten (som fixturerna)
       else caught.push('bild laddade inte: ' + p.url)
     }))
     return () => { alive = false; offs.forEach((off) => off()) }
@@ -815,7 +837,7 @@ export function Room({ mode = 'hero', pool: poolProp = null, startUid = null, on
             <div style={{ width: '100%', height: '100%', transformOrigin: breathOriginOf(p), willChange: 'transform' }}>
               <div style={{ width: '100%', height: '100%', transformOrigin: `${p.f[0] * 100}% ${p.f[1] * 100}%`, transform: isCur && closer ? `scale(${closer})` : 'scale(1)', transition: reduced ? 'none' : `transform ${CLOSER_MS}ms ${EASE}` }}>
                 {p.url
-                  ? <img src={p.url} alt={p.alt || ''} crossOrigin="anonymous" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
+                  ? <img src={p.url} alt={p.alt || ''} crossOrigin={p.cors === false ? undefined : 'anonymous'} draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }} />
                   : <Print p={p} />}
               </div>
             </div>

@@ -1,4 +1,6 @@
 /* Gaahlin Photography — global stylesheet
+   v0.6.4 — OM MIG BORTTAGEN (Anders 2026-11-21): #about, .about-image, .about-content, .about-sig och deras
+   responsiva regler borta — sektionen finns inte längre i PublicSite v0.13.0.
    v0.6.3 — NAVET STÅR STILL OCH ÄR AV GLAS (Anders 2026-09-12: "navigeringen rör marginellt på sig när jag börjar
    scrolla … snyggare om bakgrunden inte övergår till svart utan suddig/dimming som lite isat glas"). Rörelsen var
    .scrolled:s paddingbyte 1,8 → 1,2 rem med transition — borttaget, paddingen är konstant (på mobil tappade den
@@ -123,15 +125,6 @@ nav.scrolled{background:rgba(0,0,0,.45);backdrop-filter:blur(20px) saturate(1.2)
 .gallery-item:hover img{transform:scale(1.04)}
 
 
-/* ABOUT */
-#about{display:grid;grid-template-columns:1fr 1fr;min-height:80vh;border-top:1px solid rgba(255,255,255,.06)}
-.about-image{overflow:hidden}
-.about-image img{width:100%;height:100%;object-fit:cover}
-.about-content{padding:6rem 4rem;display:flex;flex-direction:column;justify-content:center;background:#0d0d0d}
-.about-content h2{font-family:'Cormorant Garamond',serif;font-size:clamp(1.8rem,2.8vw,3rem);font-weight:300;letter-spacing:.15em;text-transform:uppercase;margin-bottom:2.5rem;line-height:1.1;margin-top:1rem}
-.about-content p{font-size:12px;letter-spacing:.1em;line-height:2.2;color:rgba(255,255,255,.6);text-transform:uppercase;font-weight:300;margin-bottom:1.5rem;max-width:420px}
-.about-sig{margin-top:3rem;padding-top:2rem;border-top:1px solid rgba(255,255,255,.08);font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:rgba(255,255,255,.45)}
-
 /* CONTACT */
 #contact{padding:8rem 3rem;border-top:1px solid rgba(255,255,255,.06);display:grid;grid-template-columns:1fr 1fr;gap:8rem;max-width:1100px}
 .contact-intro h2{font-family:'Cormorant Garamond',serif;font-size:clamp(2.5rem,4vw,4rem);font-weight:300;letter-spacing:.15em;text-transform:uppercase;line-height:1;margin:1rem 0 2rem}
@@ -164,8 +157,6 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 @media(max-width:900px){
 .nav-links,.lang-switcher{display:none}
 .hamburger{display:flex}
-#about{grid-template-columns:1fr}
-.about-image{height:60vw}
 #contact{grid-template-columns:1fr;gap:4rem;padding:5rem 3rem}
 .hero-bottom{padding:1.5rem}
 }
@@ -173,6 +164,5 @@ footer p{font-size:8px;letter-spacing:.3em;text-transform:uppercase;color:rgba(2
 nav{padding:1.2rem 1.5rem;padding-top:calc(1.2rem + env(safe-area-inset-top))}
 .nav-logo svg{height:12px}
 #gallery,#contact,#statement{padding-left:1.5rem;padding-right:1.5rem}
-.about-content{padding:3rem 1.5rem}
 footer{padding:1.5rem;flex-direction:column;gap:.5rem;text-align:center}
 }

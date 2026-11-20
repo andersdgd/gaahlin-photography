@@ -1,4 +1,7 @@
 // Gaahlin Photography — lib/siteContent.js
+// v0.3.0 — OM MIG BORTTAGEN (Anders 2026-11-21): fälten about_image/about_p1–p3/about_sig och deras standardtexter
+//   borta, så gruppen "Om mig" försvinner ur adminets Innehåll. Sektionen renderas inte längre (PublicSite v0.13.0).
+//   Eventuella gamla rader i gaahlin.site_content med de nycklarna läses aldrig — de ligger kvar orörda.
 // v0.2.0 — INTRO-BILDSPELET (Arc 8, pass 8.2 Introt; Anders 2026-09-10: "bild 1 upp, zoomar och byter snyggt
 //   till bild 2 o.s.v. … och då måste du även göra om i admin så att jag kan byta eller lägga till bilder").
 //   Nytt fält `hero_pool` (kind 'pool', språkneutralt): bildspelets bilder i ordning, lagrat som en JSON-
@@ -36,13 +39,6 @@ export const FIELDS = [
 
   { key: 'statement_text',  group: 'Manifest', label: 'Manifest',             kind: 'text', multiline: true },
 
-  { key: 'about_image',     group: 'Om mig',   label: 'Porträtt',             kind: 'image', neutral: true,
-    hint: 'Stående. Visas till vänster om texten.' },
-  { key: 'about_p1',        group: 'Om mig',   label: 'Stycke 1',             kind: 'text', multiline: true },
-  { key: 'about_p2',        group: 'Om mig',   label: 'Stycke 2',             kind: 'text', multiline: true },
-  { key: 'about_p3',        group: 'Om mig',   label: 'Stycke 3',             kind: 'text', multiline: true },
-  { key: 'about_sig',       group: 'Om mig',   label: 'Signatur',             kind: 'text',  neutral: true },
-
   { key: 'contact_heading', group: 'Kontakt',  label: 'Rubrik',               kind: 'text', multiline: true,
     hint: 'Radbrytning i fältet blir radbrytning på sajten.' },
   { key: 'contact_sub',     group: 'Kontakt',  label: 'Underrad',             kind: 'text', multiline: true },
@@ -56,54 +52,37 @@ export const DEFAULTS = {
   [NEUTRAL]: {
     hero_pool: '',           // tomt = inget bildspel ⇒ stillbilden (hero_image)
     hero_image: '',          // tomt = repo-filen /images/intro/me_bw.jpg
-    about_image: '',         // tomt = repo-filen /images/about/me.jpg
     hero_city: 'Stockholm',
     hero_year: '2026',
-    about_sig: 'Anders',
     instagram_url: 'https://www.instagram.com/gaahlinphotography/',
   },
   sv: {
     hero_genre: 'Porträtt',
     statement_text: 'Fotografi är för mig där kreativitet, instinkt och precision möts — bilder som bevarar känsla, atmosfär och identitet.',
-    about_p1: 'Fotografi är för mig där kreativitet, instinkt och precision möts.',
-    about_p2: 'Bilder gör mer än att dokumentera ett ögonblick. De bevarar känsla, atmosfär och identitet.',
-    about_p3: 'Kunder väljer mig för fotografier som känns personliga, distinkta och varaktiga.',
     contact_heading: 'Arbeta\nmed mig',
     contact_sub: 'Öppen för porträttuppdrag,\neditorial och personliga projekt.',
   },
   no: {
     hero_genre: 'Portrett',
     statement_text: 'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',
-    about_p1: 'Fotografering er for meg der kreativitet, instinkt og presisjon møtes.',
-    about_p2: 'Bilder gjør mer enn å dokumentere et øyeblikk.',
-    about_p3: 'Kunder velger meg for fotografier som føles personlige og varige.',
     contact_heading: 'Jobb\nmed meg',
     contact_sub: 'Åpen for portrettoppdrag\nog personlige prosjekter.',
   },
   dk: {
     hero_genre: 'Portræt',
     statement_text: 'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',
-    about_p1: 'Fotografi er for mig dér, hvor kreativitet, instinkt og præcision mødes.',
-    about_p2: 'Billeder gør mere end at dokumentere et øjeblik.',
-    about_p3: 'Kunder vælger mig for fotografier, der føles personlige og varige.',
     contact_heading: 'Arbejd\nmed mig',
     contact_sub: 'Åben for portrætopgaver\nog personlige projekter.',
   },
   fi: {
     hero_genre: 'Muotokuva',
     statement_text: 'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',
-    about_p1: 'Valokuvaus on minulle paikka, jossa luovuus, vaisto ja tarkkuus kohtaavat.',
-    about_p2: 'Kuvat tekevät enemmän kuin dokumentoivat hetken.',
-    about_p3: 'Asiakkaat valitsevat minut henkilökohtaisista valokuvista.',
     contact_heading: 'Tee töitä\nkanssani',
     contact_sub: 'Avoin muotokuvatöille\nja henkilökohtaisille projekteille.',
   },
   en: {
     hero_genre: 'Portrait',
     statement_text: 'Photography, for me, is where creativity, instinct, and precision meet — images that preserve feeling, atmosphere, and identity.',
-    about_p1: 'Photography, for me, is where creativity, instinct, and precision meet.',
-    about_p2: 'Images do more than document a moment. They preserve feeling, atmosphere, and identity.',
-    about_p3: 'Clients choose me for photographs that feel personal, distinctive, and lasting.',
     contact_heading: 'Work\nwith me',
     contact_sub: 'Open for portrait commissions,\neditorial, and personal projects.',
   },

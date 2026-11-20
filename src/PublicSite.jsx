@@ -1,4 +1,8 @@
 // Gaahlin Photography — PublicSite.jsx (publik portfolio)
+// v0.13.0 — OM MIG BORTTAGEN (Anders 2026-11-21: "Ta bort sektionen och bilden 'OM MIG'. Vill inte ha den kvar.").
+//   Sektionen #about (porträtt, rubrik, tre stycken, signatur) och navlänken "Om mig" (dator + mobilmeny) är borta, liksom
+//   UI-strängarna nav_about/label_about. Sidan går nu hero → manifest → arbeten → kontakt. Fälten i adminet tas bort i
+//   lib/siteContent.js v0.3.0; CSS:en i index.css v0.6.4.
 // v0.12.3 — loggan som inline-SVG (src/Logo.jsx) i stället för <img> mot en fil i public/ — pubg lämnade FILE:-raden
 //   kvar i den filen (ogiltig XML, tom logga). Ingen fil, ingen extra begäran. public/logo/ kan git rm:as.
 // v0.12.2 — loggan ligger i public/logo/ (dit pubg skrev den 2026-09-12, commit 94de882), inte public/images/logo/.
@@ -174,46 +178,46 @@ const flags = {
 const langs = {
   sv: {
     label: 'SV', name: 'Svenska',
-    nav_work: 'Arbeten', nav_about: 'Om mig', nav_contact: 'Kontakt',
+    nav_work: 'Arbeten', nav_contact: 'Kontakt',
     scroll: 'Scrolla',
     label_statement: 'Manifest', label_work: 'Utvalda Arbeten', label_series: 'Serie',
-    label_about: 'Om mig', label_contact: 'Kontakt',
+    label_contact: 'Kontakt',
     form_name: 'Namn', form_email: 'E-post', form_message: 'Meddelande', form_send: 'Skicka meddelande',
     close: 'Stäng', sent: 'Meddelande skickat — tack.', error: 'Något gick fel.',
   },
   no: {
     label: 'NO', name: 'Norsk',
-    nav_work: 'Arbeider', nav_about: 'Om meg', nav_contact: 'Kontakt',
+    nav_work: 'Arbeider', nav_contact: 'Kontakt',
     scroll: 'Rull',
     label_statement: 'Manifest', label_work: 'Utvalgte Arbeider', label_series: 'Serie',
-    label_about: 'Om meg', label_contact: 'Kontakt',
+    label_contact: 'Kontakt',
     form_name: 'Navn', form_email: 'E-post', form_message: 'Melding', form_send: 'Send melding',
     close: 'Lukk', sent: 'Melding sendt — takk.', error: 'Noe gikk galt.',
   },
   dk: {
     label: 'DK', name: 'Dansk',
-    nav_work: 'Arbejder', nav_about: 'Om mig', nav_contact: 'Kontakt',
+    nav_work: 'Arbejder', nav_contact: 'Kontakt',
     scroll: 'Rul',
     label_statement: 'Manifest', label_work: 'Udvalgte Arbejder', label_series: 'Serie',
-    label_about: 'Om mig', label_contact: 'Kontakt',
+    label_contact: 'Kontakt',
     form_name: 'Navn', form_email: 'E-mail', form_message: 'Besked', form_send: 'Send besked',
     close: 'Luk', sent: 'Besked sendt — tak.', error: 'Noget gik galt.',
   },
   fi: {
     label: 'FI', name: 'Suomi',
-    nav_work: 'Työt', nav_about: 'Minusta', nav_contact: 'Yhteystiedot',
+    nav_work: 'Työt', nav_contact: 'Yhteystiedot',
     scroll: 'Vieritä',
     label_statement: 'Manifesti', label_work: 'Valitut Työt', label_series: 'Sarja',
-    label_about: 'Minusta', label_contact: 'Yhteystiedot',
+    label_contact: 'Yhteystiedot',
     form_name: 'Nimi', form_email: 'Sähköposti', form_message: 'Viesti', form_send: 'Lähetä viesti',
     close: 'Sulje', sent: 'Viesti lähetetty — kiitos.', error: 'Jokin meni pieleen.',
   },
   en: {
     label: 'EN', name: 'English',
-    nav_work: 'Work', nav_about: 'About', nav_contact: 'Contact',
+    nav_work: 'Work', nav_contact: 'Contact',
     scroll: 'Scroll',
     label_statement: 'Statement', label_work: 'Selected Work', label_series: 'Series',
-    label_about: 'About', label_contact: 'Contact',
+    label_contact: 'Contact',
     form_name: 'Name', form_email: 'Email', form_message: 'Message', form_send: 'Send message',
     close: 'Close', sent: 'Message sent — thank you.', error: 'Something went wrong.',
   },
@@ -442,7 +446,6 @@ export default function PublicSite() {
         <a href="#hero" className="nav-logo" aria-label="Gaahlin Photography"><Logo /></a>
         <ul className="nav-links">
           <li><a href="#gallery">{t.nav_work}</a></li>
-          <li><a href="#about">{t.nav_about}</a></li>
           <li><a href="#contact">{t.nav_contact}</a></li>
           <li><a href="/boka">{{ sv: 'Boka', no: 'Bestill', dk: 'Book', fi: 'Varaa', en: 'Book' }[currentLang]}</a></li>
         </ul>
@@ -485,7 +488,6 @@ export default function PublicSite() {
 
       <div className={`mobile-menu ${mobileOpen ? 'open' : ''}`}>
         <a href="#gallery" className="menu-link" onClick={closeMobile}>{t.nav_work}</a>
-        <a href="#about" className="menu-link" onClick={closeMobile}>{t.nav_about}</a>
         <a href="#contact" className="menu-link" onClick={closeMobile}>{t.nav_contact}</a>
         <a href="/boka" className="menu-link" onClick={closeMobile}>{{ sv: 'Boka', no: 'Bestill', dk: 'Book', fi: 'Varaa', en: 'Book' }[currentLang]}</a>
         <div className="mobile-lang">
@@ -586,20 +588,6 @@ export default function PublicSite() {
             </div>
           </div>
         ))}
-      </section>
-
-      <section id="about">
-        <div className="about-image reveal">
-          <img src={c.about_image ? publicImageUrl(c.about_image) : '/images/about/me.jpg'} alt="Anders Gåhlin Dufberg" loading="lazy" decoding="async" />
-        </div>
-        <div className="about-content">
-          <p className="section-label reveal">{t.label_about}</p>
-          <h2 className="reveal reveal-delay-1">Anders Gåhlin<br />Dufberg</h2>
-          <p className="reveal reveal-delay-2">{c.about_p1}</p>
-          <p className="reveal reveal-delay-3">{c.about_p2}</p>
-          <p className="reveal">{c.about_p3}</p>
-          <div className="about-sig reveal">{c.about_sig}</div>
-        </div>
       </section>
 
       <section id="contact">

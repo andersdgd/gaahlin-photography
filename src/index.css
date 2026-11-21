@@ -1,4 +1,9 @@
 /* Gaahlin Photography — global stylesheet
+   v0.6.5 — MENYN I MITTEN (Anders 2026-11-21: "navigeringen är sne, inte centrerad"). Navet är flex med
+   space-between: menyn hamnade mitt emellan loggan (≈213 px) och språkväljaren (≈80 px), alltså ~65 px till höger om
+   sidans mitt. Menyn är nu absolut centrerad på navets mitt — samma axel som heron — oberoende av vad som står i
+   hörnen. Bokstavsavståndet (.35em) efter sista bokstaven i varje länk räknas bort (margin-right:-.35em), annars
+   står ordet en halv spärr till vänster om sin egen mitt. Mobilen (≤ 900 px) har ingen meny i navet: orörd.
    v0.6.4 — OM MIG BORTTAGEN (Anders 2026-11-21): #about, .about-image, .about-content, .about-sig och deras
    responsiva regler borta — sektionen finns inte längre i PublicSite v0.13.0.
    v0.6.3 — NAVET STÅR STILL OCH ÄR AV GLAS (Anders 2026-09-12: "navigeringen rör marginellt på sig när jag börjar
@@ -43,8 +48,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 nav.scrolled{background:rgba(0,0,0,.45);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);border-bottom-color:rgba(255,255,255,.07)}
 .nav-logo{display:block;line-height:0;color:#fff;text-decoration:none}
 .nav-logo svg{height:14px;width:auto;display:block}
-.nav-links{display:flex;gap:2.5rem;list-style:none}
-.nav-links a{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s}
+.nav-links{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:2.5rem;list-style:none}
+.nav-links a{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:rgba(255,255,255,.5);text-decoration:none;transition:color .3s;margin-right:-.35em}
 .nav-links a:hover{color:#fff}
 .nav-right{display:flex;align-items:center;gap:1.5rem}
 
